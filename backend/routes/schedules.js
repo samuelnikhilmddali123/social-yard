@@ -56,6 +56,9 @@ const requireProfile = require('../middleware/requireProfile');
 const User = require('../models/User');
 const Schedule = require('../models/Schedule');
 const Screen = require('../models/Screen');
+const PromoCode = require('../models/PromoCode');
+const PromoUsage = require('../models/PromoUsage');
+const { ensureActivePromoCodes, getSettings } = require('../services/promoManager');
 const { getPresignedUrl } = require('../utils/s3');
 const { calculateCampaignPricing } = require('../utils/pricing');
 const {
@@ -176,13 +179,25 @@ router.post('/calculate-total', async (req, res) => {
     let couponError = null;
 
     if (couponCode) {
-      const couponResult = getCouponDiscount(couponCode, pricing.totalAmount);
-      if (couponResult) {
-        discountPercent = couponResult.discountPercent;
-        discountAmount = couponResult.discountAmount;
-        couponApplied = couponCode.toUpperCase().trim();
+      const cleanCode = couponCode.toUpperCase().trim();
+      const promoDB = await PromoCode.findOne({ code: cleanCode });
+      if (promoDB) {
+        if (promoDB.status === 'ACTIVE') {
+          discountPercent = 100;
+          discountAmount = pricing.totalAmount;
+          couponApplied = cleanCode;
+        } else {
+          couponError = 'Promo code has already been used';
+        }
       } else {
-        couponError = 'Invalid coupon code';
+        const couponResult = getCouponDiscount(couponCode, pricing.totalAmount);
+        if (couponResult) {
+          discountPercent = couponResult.discountPercent;
+          discountAmount = couponResult.discountAmount;
+          couponApplied = cleanCode;
+        } else {
+          couponError = 'Invalid coupon code';
+        }
       }
     }
 
@@ -199,9 +214,9 @@ router.post('/calculate-total', async (req, res) => {
   }
 });
 
-// @route   POST api/schedule/campaign
+// @route   POST api/schedule/campaign (Also supports /group-booking and /)
 // @desc    Create campaign bookings for multiple screens with locked pricing snapshot
-router.post('/campaign', auth, requireProfile, async (req, res) => {
+router.post(['/campaign', '/group-booking', '/'], auth, requireProfile, async (req, res) => {
   const { videoId, screenIds, date, endDate, startTime, endTime, isInstant, duration, durationSeconds, repeatCount, repeatTimes, slotCount, hasWatermark, format, couponCode, gst, companyName } = req.body;
 
   try {
@@ -321,29 +336,76 @@ router.post('/campaign', auth, requireProfile, async (req, res) => {
       }
     }
 
-    // ── Coupon Discount Calculation ─────────────────────────────────────────────
+    // ── Coupon / Real-time Promo Code Discount Calculation ──────────────────────
     let discountAmount = 0;
     let discountPercent = 0;
     let couponApplied = null;
+    let claimedPromoRecord = null;
+    const originalOrderAmount = pricing.totalAmount;
 
     if (couponCode) {
-      const couponResult = getCouponDiscount(couponCode, pricing.totalAmount);
-      if (couponResult) {
-        discountPercent = couponResult.discountPercent;
-        discountAmount = couponResult.discountAmount;
-        couponApplied = couponCode.toUpperCase().trim();
-        
-        pricing.totalAmount = Math.max(0, pricing.totalAmount - discountAmount);
-        if (pricing.breakdown && pricing.breakdown.length > 0) {
-          const count = pricing.breakdown.length;
-          pricing.breakdown = pricing.breakdown.map(b => ({
-            ...b,
-            subtotal: Math.max(0, b.subtotal - Math.round(discountAmount / count))
-          }));
+      const cleanCode = couponCode.toUpperCase().trim();
+      
+      // 1. Check system Promo Codes (atomic single-use claim)
+      const promoDB = await PromoCode.findOne({ code: cleanCode });
+      if (promoDB) {
+        if (promoDB.status !== 'ACTIVE') {
+          return res.status(400).json({ msg: 'Promo code has already been used' });
         }
-        console.log(`🎟️ Coupon ${couponApplied} applied. Discount: ₹${discountAmount} (${discountPercent}%). New total: ₹${pricing.totalAmount}`);
+
+        // Check user eligibility (1 free promo redemption per user)
+        const promoSettings = getSettings();
+        if (promoSettings.onePerUser) {
+          const userAlreadyUsed = await PromoUsage.findOne({
+            $or: [
+              { userId: req.user.id },
+              ...(bookedByPhone ? [{ phoneNumber: bookedByPhone }] : [])
+            ]
+          });
+          if (userAlreadyUsed) {
+            return res.status(400).json({ msg: 'You have already redeemed your single-use free promo code.' });
+          }
+        }
+
+        // ATOMIC CLAIM: Prevents double redemptions / race conditions
+        claimedPromoRecord = await PromoCode.findOneAndUpdate(
+          { code: cleanCode, status: 'ACTIVE' },
+          { status: 'USED', usedBy: req.user.id, usedAt: new Date() },
+          { new: true }
+        );
+
+        if (!claimedPromoRecord) {
+          return res.status(400).json({ msg: 'Promo code has already been used' });
+        }
+
+        discountPercent = 100;
+        discountAmount = pricing.totalAmount;
+        couponApplied = cleanCode;
+        pricing.totalAmount = 0;
+
+        if (pricing.breakdown && pricing.breakdown.length > 0) {
+          pricing.breakdown = pricing.breakdown.map(b => ({ ...b, subtotal: 0 }));
+        }
+        console.log(`🎉 100% Free Promo Code ${cleanCode} claimed by ${bookedByName} (${bookedByPhone}). Total: ₹0`);
       } else {
-        return res.status(400).json({ msg: 'Invalid coupon code.' });
+        // Fallback to static coupons
+        const couponResult = getCouponDiscount(couponCode, pricing.totalAmount);
+        if (couponResult) {
+          discountPercent = couponResult.discountPercent;
+          discountAmount = couponResult.discountAmount;
+          couponApplied = cleanCode;
+          
+          pricing.totalAmount = Math.max(0, pricing.totalAmount - discountAmount);
+          if (pricing.breakdown && pricing.breakdown.length > 0) {
+            const count = pricing.breakdown.length;
+            pricing.breakdown = pricing.breakdown.map(b => ({
+              ...b,
+              subtotal: Math.max(0, b.subtotal - Math.round(discountAmount / count))
+            }));
+          }
+        } else {
+          return res.status(400).json({ msg: 'Invalid promo code.' });
+        }
       }
     }
     // ────────────────────────────────────────────────────────────────────────────
@@ -525,6 +587,32 @@ router.post('/campaign', auth, requireProfile, async (req, res) => {
 
     // Always mark the user as having used their first booking/free trial slot
     await User.findByIdAndUpdate(req.user.id, { hasUsedFreeTrial: true });
+
+    // Record Promo Code Usage and auto-regenerate pool to 3 active codes
+    if (claimedPromoRecord) {
+      try {
+        await PromoUsage.create({
+          promoCode: claimedPromoRecord.code,
+          userId: req.user.id,
+          userName: bookedByName || bookUser?.name || 'User',
+          phoneNumber: bookedByPhone || bookUser?.phone || 'Not Provided',
+          email: bookedByEmail || bookUser?.email || 'user@e3di.org',
+          orderId: bookingGroupId,
+          discountAmount: discountAmount,
+          originalOrderAmount: originalOrderAmount,
+          finalOrderAmount: 0,
+          usedAt: new Date(),
+          status: 'USED',
+          promoType: claimedPromoRecord.type || (claimedPromoRecord.code.startsWith('SOCIAL') ? 'SOCIAL_ADS' : 'SYSTEM'),
+          generatedBy: claimedPromoRecord.createdByEmail || (claimedPromoRecord.type === 'SOCIAL_ADS' ? 'social@e3di.org' : 'System Admin')
+        });
+
+        // Regenerate active promo code pool to exactly 3 and broadcast via Socket.IO
+        await ensureActivePromoCodes(req.app.get('io'));
+      } catch (pErr) {
+        console.error('❌ Failed to log promo usage:', pErr.message);
+      }
+    }
 
     // If free trial or 100% free, send admin alerts immediately
     if (!isPaid) {

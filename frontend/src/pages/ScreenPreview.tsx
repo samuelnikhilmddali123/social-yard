@@ -244,6 +244,25 @@ const ScreenPreview = ({ overrideDeviceId }: { overrideDeviceId?: string }) => {
     backgroundColor: 'transparent',
   };
 
+  const isLandscapeScreen = deviceId === 'ethree-landscape' || deviceId?.includes('landscape');
+  if (isLandscapeScreen && playlist.length === 0) {
+    return (
+      <div className="h-screen w-screen bg-slate-950 flex flex-col items-center justify-center text-white relative overflow-hidden select-none">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-indigo-900/20 via-slate-950 to-slate-950" />
+        <div className="z-10 text-center space-y-4 px-6">
+          <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-purple-500/10 border border-purple-500/30 text-purple-300 text-xs font-black uppercase tracking-widest animate-pulse">
+            <span className="w-2 h-2 rounded-full bg-purple-400" />
+            Social Ads 16:9 Landscape Screen Standby
+          </div>
+          <h2 className="text-3xl font-black tracking-tight text-white">Ready for Booked Social Campaigns</h2>
+          <p className="text-sm font-medium text-slate-400 max-w-md mx-auto">
+            This screen displays exclusively user-booked campaign ads. No default showcase videos are played.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="h-screen w-screen bg-black overflow-hidden cursor-none relative">
       {/* PURE FULL-SCREEN MEDIA PLAYER (No text banners, no standby overlays) */}

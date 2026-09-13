@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Upload, Calendar as CalendarIcon, MapPin, CheckCircle, File as FileIcon, Clock, CreditCard, Zap, X, AlertTriangle, Star, RefreshCw, Monitor, Maximize2, Gift } from 'lucide-react';
+import { Upload, Calendar as CalendarIcon, MapPin, CheckCircle, File as FileIcon, Clock, CreditCard, Zap, X, AlertTriangle, Star, RefreshCw, Monitor, Maximize2, Gift, Copy, Sparkles } from 'lucide-react';
 import PremiumCalendar from '../components/PremiumCalendar';
 import { motion, AnimatePresence } from 'framer-motion';
 import ReactCrop, { type Crop } from 'react-image-crop';
@@ -8,7 +8,7 @@ import 'react-image-crop/dist/ReactCrop.css';
 import { uploadVideo, createCampaignBooking, getScreens } from '../services/campaignService';
 import { useCorridorPricing } from '../hooks/useCorridorPricing';
 import { useAuth } from '../AuthContext';
-import API from '../services/api';
+import API, { validatePromoCode, generateSocialPromoCode } from '../services/api';
 
 // Predefined route options for the route-centric flow
 const ROUTES = [
@@ -97,7 +97,11 @@ const LaunchCampaign = () => {
     return saved !== null ? saved === 'true' : true;
   });
 
-  const [selectedFormat, setSelectedFormat] = useState<'65-inch' | '75-inch'>('65-inch');
+  const [selectedFormat, setSelectedFormat] = useState<'65-inch' | '75-inch' | 'social-landscape'>(() => {
+    const saved = localStorage.getItem('campaign_selectedFormat');
+    if (saved === 'social-landscape' || saved === '75-inch' || saved === '65-inch') return saved;
+    return '65-inch';
+  });
 
   // Parse URL search parameters on load
   useEffect(() => {
@@ -110,7 +114,7 @@ const LaunchCampaign = () => {
     if (dirParam) setSelectedDirection(dirParam);
     if (watermarkParam === 'false') setHasWatermark(false);
     else if (watermarkParam === 'true') setHasWatermark(true);
-    if (formatParam === '65-inch') {
+    if (formatParam === '65-inch' || formatParam === '75-inch' || formatParam === 'social-landscape') {
       setSelectedFormat(formatParam);
     }
   }, [location.search]);
@@ -300,6 +304,10 @@ const LaunchCampaign = () => {
 
   const { user, refreshUser } = useAuth();
 
+  const isSocialAdsAccount = Boolean(
+    user && (user.email === 'social@e3di.org' || user.email === 'socialads@e3di.org' || user.role === 'admin')
+  );
+
   // ── Free Trial Eligibility ───────────────────────────────────────────────────
   const isEligibleForFreeTrial = !user?.hasUsedFreeTrial;
   // ────────────────────────────────────────────────────────────────────────────
@@ -308,12 +316,57 @@ const LaunchCampaign = () => {
   const [screens, setScreens] = useState<any[]>([]);
   const [selectedScreenIds, setSelectedScreenIds] = useState<string[]>(() => {
     const savedFormat = localStorage.getItem('campaign_selectedFormat') || '65-inch';
+    if (savedFormat === 'social-landscape') return ['ethree-landscape'];
     return savedFormat === '75-inch' ? ['ethree-75'] : ['ethree-65'];
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [couponInput, setCouponInput] = useState('');
   const [appliedCouponCode, setAppliedCouponCode] = useState('');
+  const [promoValidating, setPromoValidating] = useState(false);
+  const [promoSuccessMsg, setPromoSuccessMsg] = useState<string | null>(null);
+  const [promoErrorMsg, setPromoErrorMsg] = useState<string | null>(null);
+
+  // Social Ads Account & Promo Generator State
+  const [showSocialAdsModal, setShowSocialAdsModal] = useState(false);
+  const [generatingSocialPromo, setGeneratingSocialPromo] = useState(false);
+  const [generatedSocialCode, setGeneratedSocialCode] = useState<string | null>(null);
+  const [socialCodeCopied, setSocialCodeCopied] = useState(false);
+
+  const handleGenerateSocialPromo = async () => {
+    setGeneratingSocialPromo(true);
+    try {
+      const res = await generateSocialPromoCode();
+      if (res.success && res.code) {
+        setGeneratedSocialCode(res.code);
+      }
+    } catch (err: any) {
+      console.error('❌ Failed to generate social promo:', err);
+    } finally {
+      setGeneratingSocialPromo(false);
+    }
+  };
+
+  const handleApplyPromo = async () => {
+    if (!couponInput || !couponInput.trim()) return;
+    const cleanCode = couponInput.trim().toUpperCase();
+    setPromoErrorMsg(null);
+    setPromoSuccessMsg(null);
+    setPromoValidating(true);
+    try {
+      const res = await validatePromoCode(cleanCode);
+      if (res.valid) {
+        setAppliedCouponCode(cleanCode);
+        setPromoSuccessMsg(res.message || `✓ 100% Free Promo Code "${cleanCode}" applied successfully!`);
+      } else {
+        setPromoErrorMsg(res.message || 'Invalid promo code');
+      }
+    } catch (err: any) {
+      setPromoErrorMsg(err.response?.data?.message || 'Invalid promo code or already used');
+    } finally {
+      setPromoValidating(false);
+    }
+  };
 
   // GST State & Handlers
   const [gstInput, setGstInput] = useState('');
@@ -366,7 +419,6 @@ const LaunchCampaign = () => {
     discountAmount: couponDiscount,
     couponApplied,
     couponError,
-    discountPercent: couponDiscountPercent,
   } = useCorridorPricing(selectedScreenIds, campaignDuration || 10, screens, true, daysCount, appliedCouponCode);
 
   const formatMultiplier = selectedFormat === '75-inch' ? 1.3 : 1.0;
@@ -1069,11 +1121,23 @@ const LaunchCampaign = () => {
                 <div className="flex-1 space-y-6 my-4">
                   {/* Screen Format Selection */}
                   <div className="space-y-3 pt-2">
-                      <div>
-                        <h3 className="text-sm font-black text-slate-800 tracking-tight">Select Screen Format</h3>
-                        <p className="text-xs text-slate-400 font-medium font-sora">Choose the display size format for your campaign loop.</p>
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                        <div>
+                          <h3 className="text-sm font-black text-slate-800 tracking-tight">Select Screen Format</h3>
+                          <p className="text-xs text-slate-400 font-medium font-sora">Choose the display size format for your campaign loop.</p>
+                        </div>
+                        {isSocialAdsAccount && (
+                          <button
+                            type="button"
+                            onClick={() => setShowSocialAdsModal(true)}
+                            className="px-3.5 py-1.5 bg-gradient-to-r from-[#6C47FF] to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white text-[11px] font-black rounded-xl transition-all shadow-md flex items-center gap-1.5 shrink-0 self-start sm:self-auto"
+                          >
+                            <Sparkles size={12} className="text-yellow-300 animate-pulse" /> Create Social Ads Promo
+                          </button>
+                        )}
                       </div>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 font-sora">
+
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 font-sora">
                         {/* Pole 1 (5x3 Feet) Card */}
                         <button
                           type="button"
@@ -1087,12 +1151,12 @@ const LaunchCampaign = () => {
                           <div className="flex items-center justify-between">
                             <div className="flex items-center gap-2">
                               <Monitor size={14} className={selectedFormat === '65-inch' ? 'text-[#6C47FF]' : 'text-slate-400'} />
-                              <span className="text-xs font-black text-slate-850">5×3 Feet Display (Pole 1)</span>
+                              <span className="text-xs font-black text-slate-850">5×3 Feet (Pole 1)</span>
                             </div>
                             <CheckCircle size={14} className={selectedFormat === '65-inch' ? 'text-[#6C47FF]' : 'text-slate-250'} />
                           </div>
                           <p className="text-[11px] text-slate-500 font-semibold mt-2">
-                            Optimized for dense transit corridors, retail loops, and street-level intersections.
+                            Optimized for dense transit corridors & street intersections.
                           </p>
                           <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mt-3 block">Size: 5 × 3 Feet • Pole 1 • 2,500 Nits</span>
                         </button>
@@ -1110,14 +1174,37 @@ const LaunchCampaign = () => {
                           <div className="flex items-center justify-between">
                             <div className="flex items-center gap-2">
                               <Monitor size={14} className={selectedFormat === '75-inch' ? 'text-[#6C47FF]' : 'text-slate-400'} />
-                              <span className="text-xs font-black text-slate-850">5×3 Feet Display (Pole 2)</span>
+                              <span className="text-xs font-black text-slate-850">5×3 Feet (Pole 2)</span>
                             </div>
                             <CheckCircle size={14} className={selectedFormat === '75-inch' ? 'text-[#6C47FF]' : 'text-slate-250'} />
                           </div>
                           <p className="text-[11px] text-slate-500 font-semibold mt-2">
-                            Landmark visibility, corporate zones, and maximum exposure exits.
+                            Landmark visibility, corporate zones, & maximum exposure exits.
                           </p>
                           <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mt-3 block">Size: 5 × 3 Feet • Pole 2 • 3,500 Nits</span>
+                        </button>
+
+                        {/* Social Ads (16x9 Landscape) Card */}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedFormat('social-landscape');
+                            localStorage.setItem('campaign_selectedFormat', 'social-landscape');
+                            setSelectedScreenIds(['ethree-landscape']);
+                          }}
+                          className={`p-4 rounded-xl border text-left flex flex-col justify-between transition-all relative overflow-hidden group ${selectedFormat === 'social-landscape' ? 'border-[#6C47FF] bg-indigo-50/20 ring-2 ring-indigo-500/10' : 'border-slate-200 hover:border-slate-300'}`}
+                        >
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <Monitor size={14} className={selectedFormat === 'social-landscape' ? 'text-[#6C47FF]' : 'text-slate-400'} />
+                              <span className="text-xs font-black text-slate-850">Social Ads (16×9)</span>
+                            </div>
+                            <CheckCircle size={14} className={selectedFormat === 'social-landscape' ? 'text-[#6C47FF]' : 'text-slate-250'} />
+                          </div>
+                          <p className="text-[11px] text-slate-500 font-semibold mt-2">
+                            Horizontal widescreen format for social ads feed & landscape screens.
+                          </p>
+                          <span className="text-[9px] font-black text-purple-600 uppercase tracking-widest mt-3 block">Size: 16 × 9 Landscape • Social Screen</span>
                         </button>
                       </div>
                     </div>
@@ -1631,11 +1718,11 @@ const LaunchCampaign = () => {
                     <div className="bg-[#FAF7F2] border border-slate-200 rounded-xl p-4 space-y-2 text-xs">
                       <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Creative Requirements Check</p>
                       <div className="flex items-center justify-between text-slate-600">
-                        <span>Aspect Ratio: <b>Vertical 9:16 Portrait</b></span>
+                        <span>Aspect Ratio: <b>{selectedFormat === 'social-landscape' ? 'Horizontal 16:9 Landscape' : 'Vertical 9:16 Portrait'}</b></span>
                         <CheckCircle size={14} className="text-emerald-500" />
                       </div>
                       <div className="flex items-center justify-between text-slate-600">
-                        <span>Resolution: <b>1080×1920px (Portrait)</b></span>
+                        <span>Resolution: <b>{selectedFormat === 'social-landscape' ? '1920×1080px (Landscape)' : '1080×1920px (Portrait)'}</b></span>
                         <CheckCircle size={14} className="text-emerald-500" />
                       </div>
                       <div className="flex items-center justify-between text-slate-600">
@@ -1685,7 +1772,7 @@ const LaunchCampaign = () => {
 
                         <div className="flex justify-between items-center text-xs text-slate-600">
                           <span>Selected Screen Size:</span>
-                          <b className="text-slate-800 font-bold">{selectedFormat === '65-inch' ? '5×3 Feet Display (Pole 1)' : '5×3 Feet Display (Pole 2)'}</b>
+                          <b className="text-slate-800 font-bold">{selectedFormat === 'social-landscape' ? 'Social Ads 16:9 Landscape Screen' : selectedFormat === '65-inch' ? '5×3 Feet Display (Pole 1)' : '5×3 Feet Display (Pole 2)'}</b>
                         </div>
 
                         <div className="flex justify-between items-center text-xs text-slate-600">
@@ -1788,9 +1875,9 @@ const LaunchCampaign = () => {
                       <div className="bg-[#FAF7F2] p-4 rounded-2xl border border-slate-200/60 space-y-2 mt-4">
                         <div className="flex items-center justify-between">
                           <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest block font-sans">Promo Code</span>
-                          {couponApplied && !couponError && (
+                          {(couponApplied || promoSuccessMsg) && (
                             <span className="bg-emerald-100 text-emerald-800 text-[9px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider font-sans">
-                              Applied (-{couponDiscountPercent}%)
+                              100% Free Applied
                             </span>
                           )}
                         </div>
@@ -1800,24 +1887,26 @@ const LaunchCampaign = () => {
                             placeholder="ENTER PROMO CODE"
                             value={couponInput}
                             onChange={(e) => setCouponInput(e.target.value)}
+                            onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleApplyPromo(); } }}
                             className="flex-grow px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 placeholder-slate-400 focus:outline-none focus:border-[#6C47FF] uppercase font-sans"
                           />
                           <button
                             type="button"
-                            onClick={() => setAppliedCouponCode(couponInput)}
-                            className="px-4 py-2 bg-[#6C47FF] hover:bg-[#5936e0] text-white text-xs font-black rounded-xl transition-colors font-sans"
+                            disabled={promoValidating || !couponInput.trim()}
+                            onClick={handleApplyPromo}
+                            className="px-4 py-2 bg-[#6C47FF] hover:bg-[#5936e0] disabled:bg-slate-300 text-white text-xs font-black rounded-xl transition-colors font-sans"
                           >
-                            Apply
+                            {promoValidating ? '...' : 'Apply'}
                           </button>
                         </div>
-                        {couponError && (
+                        {!promoSuccessMsg && (promoErrorMsg || (couponError && !appliedCouponCode)) && (
                           <p className="text-[10px] font-bold text-red-500 text-left font-sans">
-                            ⚠️ {couponError}
+                            ⚠️ {promoErrorMsg || couponError}
                           </p>
                         )}
-                        {couponApplied && !couponError && (
+                        {(promoSuccessMsg || (couponApplied && !couponError)) && (
                           <p className="text-[10px] font-bold text-emerald-600 text-left font-sans">
-                            ✓ Coupon "{couponApplied}" applied successfully!
+                            {promoSuccessMsg || `✓ Promo Code "${couponApplied}" applied! Grand total payable is ₹0.`}
                           </p>
                         )}
                       </div>
@@ -1933,7 +2022,7 @@ const LaunchCampaign = () => {
                         disabled={loading}
                         className="py-3.5 px-6 bg-[#6C47FF] text-white font-black text-xs uppercase tracking-widest rounded-xl hover:bg-indigo-700 shadow-md hover:shadow-lg transition-all flex items-center gap-1.5 disabled:opacity-50"
                       >
-                        {loading ? 'Processing Payment...' : <><CreditCard size={14} /> Pay & Launch Campaign</>}
+                        {loading ? (totalAmount === 0 ? 'Launching Campaign...' : 'Processing Payment...') : (totalAmount === 0 ? <><CheckCircle size={14} className="text-emerald-300" /> Launch Free Campaign</> : <><CreditCard size={14} /> Pay & Launch Campaign</>)}
                       </button>
                     </div>
                   )}
@@ -2007,7 +2096,7 @@ const LaunchCampaign = () => {
                 
                 {/* LED Screen Wrapper */}
                 <div 
-                  className={`relative aspect-[9/16] w-[120px] rounded-lg overflow-hidden border-2 bg-slate-900 flex items-center justify-center transition-all ${mockupTheme === 'day' ? 'border-slate-800 shadow-lg' : 'border-slate-950 shadow-[0_0_25px_rgba(108,71,255,0.45)]'}`}
+                  className={`relative ${selectedFormat === 'social-landscape' ? 'aspect-[16/9] w-[210px]' : 'aspect-[9/16] w-[120px]'} rounded-lg overflow-hidden border-2 bg-slate-900 flex items-center justify-center transition-all ${mockupTheme === 'day' ? 'border-slate-800 shadow-lg' : 'border-slate-950 shadow-[0_0_25px_rgba(108,71,255,0.45)]'}`}
                 >
                   
                   {previewUrl ? (
@@ -2099,7 +2188,11 @@ const LaunchCampaign = () => {
               <div className="flex justify-between items-center">
                 <span>Screens Chosen:</span>
                 <span className="font-extrabold text-slate-800">
-                  {selectedFormat === '65-inch' ? 'eThree 5×3 Feet (Pole 1)' : 'eThree 5×3 Feet (Pole 2)'}
+                  {selectedFormat === 'social-landscape'
+                    ? 'Social Ads 16:9 Landscape Screen'
+                    : selectedFormat === '65-inch'
+                    ? 'eThree 5×3 Feet (Pole 1)'
+                    : 'eThree 5×3 Feet (Pole 2)'}
                 </span>
               </div>
               <div className="flex justify-between items-center">
@@ -2640,6 +2733,116 @@ const LaunchCampaign = () => {
                 >
                   Proceed to Dashboard
                 </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* ── SOCIAL ADS ACCOUNT & PROMO CODE GENERATOR MODAL ── */}
+      <AnimatePresence>
+        {showSocialAdsModal && (
+          <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
+              onClick={() => setShowSocialAdsModal(false)}
+            />
+
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 15 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 15 }}
+              transition={{ type: 'spring', duration: 0.5 }}
+              className="relative w-full max-w-lg bg-white rounded-3xl p-6 sm:p-8 border border-slate-100 shadow-2xl space-y-6 z-10 overflow-hidden text-slate-800"
+            >
+              {/* Close Button */}
+              <button
+                type="button"
+                onClick={() => setShowSocialAdsModal(false)}
+                className="absolute top-5 right-5 p-2 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 transition-colors"
+              >
+                <X size={18} />
+              </button>
+
+              {/* Header */}
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-purple-600 via-[#6C47FF] to-indigo-600 flex items-center justify-center text-white shadow-md shadow-indigo-300 shrink-0">
+                  <Sparkles size={24} />
+                </div>
+                <div>
+                  <h3 className="text-xl font-black text-slate-900 tracking-tight">Social Ads Account</h3>
+                  <p className="text-xs text-slate-500 font-medium">Generate 100% Free Promo Codes for Social Ads & Widescreens</p>
+                </div>
+              </div>
+
+              {/* Account Card info */}
+              <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200/80 space-y-2 text-xs">
+                <div className="flex justify-between items-center">
+                  <span className="font-bold text-slate-600">Account Status:</span>
+                  <span className="bg-emerald-100 text-emerald-800 font-black text-[10px] px-2.5 py-0.5 rounded-full uppercase tracking-wider">Active Social Ads Partner</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="font-bold text-slate-600">Target Screen Format:</span>
+                  <span className="font-bold text-slate-900">16:9 Widescreen Landscape</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="font-bold text-slate-600">Promo Discount Rate:</span>
+                  <span className="font-black text-emerald-600">100% FREE (₹0 Total)</span>
+                </div>
+              </div>
+
+              {/* Promo Generator Box */}
+              <div className="bg-gradient-to-br from-indigo-900 via-purple-950 to-slate-900 rounded-2xl p-5 text-white space-y-4 shadow-xl">
+                <p className="text-xs font-semibold text-indigo-200">
+                  Click below to generate a new unique promo code. When applied during campaign checkout, the booking is 100% Free!
+                </p>
+
+                {generatedSocialCode ? (
+                  <div className="space-y-3 bg-white/10 p-4 rounded-xl border border-white/10 backdrop-blur-md">
+                    <span className="text-[10px] font-black uppercase tracking-widest text-indigo-300 block">Generated Social Ads Promo Code</span>
+                    <div className="flex items-center justify-between bg-black/40 p-3 rounded-lg border border-white/20">
+                      <span className="text-2xl font-black tracking-widest text-yellow-300 font-mono">{generatedSocialCode}</span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          navigator.clipboard.writeText(generatedSocialCode);
+                          setSocialCodeCopied(true);
+                          setTimeout(() => setSocialCodeCopied(false), 2000);
+                        }}
+                        className="px-3 py-1.5 bg-white/20 hover:bg-white/30 text-white text-xs font-bold rounded-md flex items-center gap-1 transition-all"
+                      >
+                        {socialCodeCopied ? <CheckCircle size={14} className="text-emerald-400" /> : <Copy size={14} />}
+                        {socialCodeCopied ? 'Copied!' : 'Copy Code'}
+                      </button>
+                    </div>
+
+                    <div className="flex gap-2 pt-1">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setCouponInput(generatedSocialCode);
+                          setShowSocialAdsModal(false);
+                        }}
+                        className="w-full py-2.5 bg-yellow-400 hover:bg-yellow-300 text-slate-950 font-black text-xs uppercase tracking-wider rounded-xl transition-all shadow-md"
+                      >
+                        Apply Code to Campaign
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={handleGenerateSocialPromo}
+                    disabled={generatingSocialPromo}
+                    className="w-full py-3.5 bg-gradient-to-r from-yellow-400 to-amber-400 hover:from-yellow-300 hover:to-amber-300 text-slate-950 font-black text-xs uppercase tracking-widest rounded-xl transition-all shadow-lg flex items-center justify-center gap-2"
+                  >
+                    {generatingSocialPromo ? <RefreshCw size={16} className="animate-spin" /> : <Sparkles size={16} />}
+                    {generatingSocialPromo ? 'Generating Code...' : 'Generate Social Ads Promo Code'}
+                  </button>
+                )}
               </div>
             </motion.div>
           </div>

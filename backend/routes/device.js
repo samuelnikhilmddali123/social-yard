@@ -240,6 +240,25 @@ router.get('/:deviceId', async (req, res) => {
       });
     }
 
+    // Special behavior for ethree-landscape: DO NOT auto-play filler videos if no user ads booked
+    if (deviceId === 'ethree-landscape' || deviceId.includes('landscape')) {
+      return res.json({
+        isFallback: false,
+        isNoUserAds: true,
+        playlist: [],
+        current: null,
+        next: null,
+        screen: {
+          name: 'eThree 16:9 Social Ads Landscape Display',
+          location: 'Social Ads Widescreen Corridor',
+          deviceId: deviceId,
+          status: 'online',
+          soundEnabled: false,
+          volume: 50,
+        }
+      });
+    }
+
     return res.json(fallbackResponse);
   } catch (err) {
     console.error(`[DEVICE] Router error for ${deviceId}:`, err.message);

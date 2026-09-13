@@ -62,6 +62,22 @@ const fallbackScreens = [
     status: 'online',
     lat: 16.5062,
     lng: 80.6480
+  },
+  {
+    _id: '65f800000000000000000099',
+    deviceId: 'ethree-landscape',
+    name: 'Social Ads 16:9 Landscape Screen',
+    location: 'eThree Social Hub — Vijayawada',
+    corridorName: 'Social Ads Widescreen',
+    city: 'Vijayawada',
+    area: 'Social Ads',
+    poleId: 'ETHREE-SOC1',
+    side: 'A',
+    status: 'online',
+    orientation: 'landscape',
+    format: 'social-landscape',
+    lat: 16.5062,
+    lng: 80.6480
   }
 ];
 

@@ -3,16 +3,12 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Clock, Monitor, IndianRupee, 
   BarChart3, LogOut, User, ChevronRight, ChevronDown, Menu,
-  ShieldCheck, CheckCircle, Trash2, Zap, Users, Folder, Video, Shield
+  ShieldCheck, CheckCircle, Trash2, Zap, Users, Folder, Video, Shield, Ticket
 } from 'lucide-react';
 import API from '../services/api';
 
 import { useNavigate, useLocation, Routes, Route, Navigate } from 'react-router-dom';
 import 'leaflet/dist/leaflet.css';
-
-
-
-
 
 import Approvals from './admin/Approvals';
 import Inventory from './admin/Inventory';
@@ -21,6 +17,7 @@ import Pricing from './admin/Pricing';
 import Settings from './admin/Settings';
 import PartnerRequests from './admin/PartnerRequests';
 import LiveCCTV from './admin/LiveCCTV';
+import PromoCodeManagement from './admin/PromoCodeManagement';
 
 import AddPoleModal from '../components/admin/AddPoleModal';
 
@@ -221,6 +218,7 @@ const AdminDashboard = () => {
   ];
 
   const otherMenuItems = [
+    { id: 'promo-codes', label: 'Promo Codes', icon: Ticket },
     { id: 'inventory', label: 'Inventory', icon: Monitor, count: uniquePolesCount },
     { id: 'live-cctv', label: 'Live Camera Monitoring', icon: Video },
     { id: 'partner-requests', label: 'Partner Requests', icon: Users },
@@ -427,6 +425,9 @@ const AdminDashboard = () => {
               } />
               <Route path="partner-requests" element={
                 <PartnerRequests />
+              } />
+              <Route path="promo-codes" element={
+                <PromoCodeManagement />
               } />
               <Route path="pricing" element={
                 <Pricing plans={plans} />

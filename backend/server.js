@@ -29,6 +29,8 @@ const edgeRoutes = require('./routes/edgeRoutes');
 const adminCampaignsRoutes = require('./routes/adminCampaigns');
 const corridorsRoutes = require('./routes/corridors');
 const sosRoutes = require('./routes/sos');
+const promoRoutes = require('./routes/promo');
+const { ensureActivePromoCodes } = require('./services/promoManager');
 const { registerEdgeSocket, unregisterEdgeSocket, handleEdgeHeartbeat, handleHlsSegmentSync, updateSessionStatus } = require('./services/edgeManager');
 const swaggerUi = require('swagger-ui-express');
 const swaggerDocument = require('./swagger.json');
@@ -229,7 +231,7 @@ const connectDB = async () => {
         try {
           console.log('🔄 Auto-provisioning temporary engine...');
           const { MongoMemoryServer } = require('mongodb-memory-server');
-          const mongod = await MongoMemoryServer.create();
+          const mongod = await MongoMemoryServer.create({ binary: { version: '4.4.26' } });
           await mongoose.connect(mongod.getUri());
           console.log('✨ Auto-Provisioned Engine Active');
           await ensureSeedData();
@@ -253,6 +255,19 @@ const ensureSeedData = async () => {
     const adminExists = await User.findOne({ email: 'admin@jaan.com' });
     if (!adminExists) {
       await User.create({ name: 'System Admin', email: 'admin@jaan.com', password: 'adminjaan123', role: 'admin' });
+    }
+
+    const socialUser = await User.findOne({ email: 'social@e3di.org' });
+    if (!socialUser) {
+      await User.create({
+        name: 'Social Ads Creator Partner',
+        email: 'social@e3di.org',
+        password: 'socialads123',
+        role: 'user',
+        companyName: 'Social Ads Network',
+        phone: '9876543210'
+      });
+      console.log('👤 Created default Social Ads Partner user: social@e3di.org');
     }
 
     const planCount = await Plan.countDocuments();
@@ -317,6 +332,21 @@ const ensureSeedData = async () => {
         lat: 16.5062,
         lng: 80.6480,
         cctvCameraId: 'sparsh-pole2'
+      },
+      {
+        deviceId: 'ethree-landscape',
+        name: 'Social Ads 16:9 Landscape Screen',
+        location: 'eThree Social Hub — Vijayawada',
+        corridorName: 'Social Ads Widescreen',
+        city: 'Vijayawada',
+        area: 'Social Ads',
+        poleId: 'ETHREE-SOC1',
+        side: 'A',
+        status: 'online',
+        orientation: 'landscape',
+        lat: 16.5062,
+        lng: 80.6480,
+        cctvCameraId: 'sparsh-main'
       }
     ];
 
@@ -333,7 +363,7 @@ const ensureSeedData = async () => {
 
 // Non-blocking database connection
 if (!process.env.VERCEL) {
-  connectDB().catch(() => {});
+  connectDB().then(() => ensureSeedData()).catch(() => {});
 }
 
 app.use((req, res, next) => {
@@ -407,7 +437,11 @@ app.use('/api/videos', videoRoutes);
 app.use('/_/backend/api/videos', videoRoutes);
 
 app.use('/api/schedule', scheduleRoutes);
+app.use('/api/schedules', scheduleRoutes);
 app.use('/_/backend/api/schedule', scheduleRoutes);
+app.use('/_/backend/api/schedules', scheduleRoutes);
+app.use('/schedule', scheduleRoutes);
+app.use('/schedules', scheduleRoutes);
 
 app.use('/api/device', deviceRoutes);
 app.use('/_/backend/api/device', deviceRoutes);
@@ -454,6 +488,9 @@ app.get(['/api/health/dependencies', '/health/dependencies'], (req, res) => {
   });
 });
 
+app.use('/api/promo', promoRoutes);
+app.use('/_/backend/api/promo', promoRoutes);
+
 app.use('/api/corridors', corridorsRoutes);
 app.use('/api/sos', sosRoutes);
 app.use('/sos', sosRoutes);
@@ -481,10 +518,16 @@ if (!process.env.VERCEL) {
 if (!process.env.VERCEL) {
   const server = app.get('server');
   if (server) {
-    const PORT = process.env.PORT || 5001;
-    server.listen(PORT, () => {
+    const PORT = process.env.PORT || 5000;
+    server.listen(PORT, async () => {
       console.log(`🚀 Server v3.0-Production running on port ${PORT}`);
       console.log('🛡️  MONGODB_URI Present:', !!process.env.MONGODB_URI);
+      try {
+        await connectDB();
+        await ensureActivePromoCodes(app.get('io'));
+      } catch (dbErr) {
+        console.error('⚠️ DB Init Error:', dbErr.message);
+      }
       try {
         const { authenticator } = require('otplib');
         console.log('🛡️  Authenticator Loaded:', !!authenticator);

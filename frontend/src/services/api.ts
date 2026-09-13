@@ -67,4 +67,29 @@ export const getFullStreamUrl = (relativeUrl: string) => {
   return `${base}${cleanPath}`;
 };
 
+export const validatePromoCode = async (code: string) => {
+  const response = await API.post('/promo/validate', { code });
+  return response.data;
+};
+
+export const getActivePromoCodes = async () => {
+  const response = await API.get('/promo/active');
+  return response.data;
+};
+
+export const getPromoCodeUsage = async () => {
+  const response = await API.get('/promo/usage');
+  return response.data;
+};
+
+export const generateSocialPromoCode = async () => {
+  const response = await API.post('/promo/generate-social');
+  return response.data;
+};
+
+export const getAllPromoCodes = async () => {
+  const response = await API.get('/promo/all');
+  return response.data;
+};
+
 export default API;
