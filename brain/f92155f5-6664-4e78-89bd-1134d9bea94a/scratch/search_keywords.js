@@ -1,0 +1,10 @@
+const fs = require('fs');
+const content = fs.readFileSync("c:\\Users\\nikhil\\Downloads\\ledscreens\\frontend\\src\\pages\\LaunchCampaign.tsx", 'utf8');
+console.log("Length:", content.length);
+console.log("Includes Calendar:", content.includes("Calendar"));
+console.log("Includes CalendarIcon:", content.includes("CalendarIcon"));
+console.log("Includes startDate:", content.includes("startDate"));
+console.log("Includes isInstant:", content.includes("isInstant"));
+console.log("Includes bg-slate-900:", content.includes("bg-slate-900"));
+console.log("Includes PremiumTimePicker:", content.includes("PremiumTimePicker"));
+console.log("Includes step2:", content.includes("step2"));

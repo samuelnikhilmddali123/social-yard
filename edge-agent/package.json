@@ -1,0 +1,18 @@
+{
+  "name": "e3di-edge-agent",
+  "version": "1.0.0",
+  "description": "E3DI Site CCTV Edge Agent Daemon for Outbound WebRTC/HLS Streaming",
+  "main": "edgeAgent.js",
+  "scripts": {
+    "start": "node edgeAgent.js",
+    "dev": "node edgeAgent.js"
+  },
+  "dependencies": {
+    "axios": "^1.6.8",
+    "dotenv": "^16.4.5",
+    "node-datachannel": "^0.32.3",
+    "socket.io-client": "^4.7.5",
+    "systeminformation": "^5.22.0",
+    "ws": "^8.16.0"
+  }
+}

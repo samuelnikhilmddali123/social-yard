@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>K-1000C Direct Controller (Screen 024 Mode)</title>
+  <style>
+    :root {
+      --bg: #0d1117;
+      --card-bg: #161b22;
+      --card-border: #30363d;
+      --text: #f0f6fc;
+      --text-dim: #8b949e;
+      --gold: #e3b341;
+      --accent: #58a6ff;
+      --danger: #f85149;
+      --success: #3fb950;
+      --purple: #bc8cff;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    body {
+      background: #090d13;
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 1.5rem 1rem;
+    }
+    .container { max-width: 720px; width: 100%; display: flex; flex-direction: column; gap: 1.2rem; }
+    .card { background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 14px; padding: 1.3rem; }
+    .status-badge { display: inline-flex; align-items: center; gap: 8px; padding: 6px 14px; border-radius: 9999px; font-size: 0.85rem; font-weight: 600; background: rgba(248,81,73,0.15); color: var(--danger); border: 1px solid rgba(248,81,73,0.3); }
+    .status-badge.connected { background: rgba(63,185,80,0.15); color: var(--success); border-color: rgba(63,185,80,0.3); }
+    .btn { cursor: pointer; border: none; font-weight: 600; font-size: 0.88rem; padding: 10px 14px; border-radius: 8px; transition: all 0.15s ease; display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+    .btn:disabled { opacity: 0.35; cursor: not-allowed; }
+    .btn-gold { background: #d29922; color: #0d1117; }
+    .btn-gold:hover:not(:disabled) { background: #e3b341; }
+    .btn-dark { background: #21262d; color: var(--text); border: 1px solid #30363d; }
+    .btn-primary { background: #1f6feb; color: #fff; }
+    .btn-danger { background: #da3633; color: #fff; }
+    .btn-green { background: #238636; color: #fff; }
+    .btn-purple { background: #8957e5; color: #fff; }
+    .test-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 10px; margin-top: 0.8rem; }
+    .select-box { background: #0d1117; border: 1px solid #30363d; color: var(--gold); padding: 8px 12px; border-radius: 8px; font-weight: 600; outline: none; width: 100%; font-size: 0.9rem; }
+    .log-box { background: #070a12; border: 1px solid #21262d; border-radius: 8px; padding: 10px; font-family: monospace; font-size: 0.8rem; color: #58a6ff; max-height: 180px; overflow-y: auto; white-space: pre-wrap; }
+    .badge-dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <!-- Header -->
+    <div style="background: #161b22; border: 1px solid #30363d; border-radius: 12px; padding: 1rem 1.4rem; display: flex; justify-content: space-between; align-items: center;">
+      <div>
+        <h1 style="font-size: 1.3rem; color: var(--gold);">🎛️ K-1000C Screen 024 Controller</h1>
+        <span style="font-size: 0.85rem; color: var(--text-dim);">Shenzhen Xinboled v1.1 Mode Probe</span>
+      </div>
+      <div id="statusBadge" class="status-badge">
+        <span class="badge-dot"></span>
+        <span id="statusText">Disconnected</span>
+      </div>
+    </div>
+
+    <!-- Connection Card -->
+    <div class="card">
+      <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+        <div id="devInfo" style="font-size: 0.9rem; color: var(--text-dim);">
+          Target: <strong>XB-Led-1BA1 (Display: 024)</strong>
+        </div>
+        <div style="display: flex; gap: 8px;">
+          <button id="btnConnect" class="btn btn-gold" onclick="connectBle()">
+            🔍 Connect (XB-Led)
+          </button>
+          <button id="btnDisconnect" class="btn btn-dark" onclick="disconnectBle()" disabled>
+            Disconnect
+          </button>
+        </div>
+      </div>
+
+      <!-- Pipe Selector -->
+      <div style="margin-top: 12px;">
+        <label style="font-size: 0.85rem; color: var(--text-dim); margin-bottom: 4px; display: block;">Send Packets Via TX Pipe:</label>
+        <select id="pipeSelect" class="select-box" onchange="onPipeChange()">
+          <option value="FFF2">1. Pipe 0xFFF2 (Standard K-1000C Data Port - Recommended)</option>
+          <option value="AE01">2. Pipe 0xAE01 (Secondary Control Port)</option>
+          <option value="BOTH">3. Both Pipes (0xFFF2 + 0xAE01)</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Live Test Buttons -->
+    <div class="card" id="controlPanel">
+      <h3 style="font-size: 1.05rem; color: var(--gold); margin-bottom: 0.3rem;">🎯 Live Commands (Watch Controller Screen & Strip):</h3>
+      <p style="font-size: 0.82rem; color: var(--text-dim); margin-bottom: 0.8rem;">
+        Click these buttons one by one to see the number on the controller screen or the LED colors change:
+      </p>
+
+      <div class="test-grid">
+        <button class="btn btn-purple" onclick="send([0xA5, 0x01, 0x00, 0x00, 0x00, 0xA6, 0x5A], 'Built-In Prog 1')" disabled>
+          🌈 1. Built-In Prog 1
+        </button>
+        <button class="btn btn-purple" onclick="send([0xA5, 0x01, 0x01, 0x00, 0x00, 0xA7, 0x5A], 'Built-In Prog 2')" disabled>
+          🌈 2. Built-In Prog 2
+        </button>
+        <button class="btn btn-purple" onclick="send([0xA5, 0x01, 0x02, 0x00, 0x00, 0xA8, 0x5A], 'Built-In Prog 3')" disabled>
+          🌈 3. Built-In Prog 3
+        </button>
+
+        <button class="btn btn-danger" onclick="send([0xA5, 0x04, 255, 0, 0, (0xA5+4+255)&0xFF, 0x5A], 'Scene RED')" disabled>
+          🔴 4. Scene RED (0xA5)
+        </button>
+        <button class="btn btn-green" onclick="send([0xA5, 0x04, 0, 255, 0, (0xA5+4+255)&0xFF, 0x5A], 'Scene GREEN')" disabled>
+          🟢 5. Scene GREEN (0xA5)
+        </button>
+        <button class="btn btn-primary" onclick="send([0xA5, 0x04, 0, 0, 255, (0xA5+4+255)&0xFF, 0x5A], 'Scene BLUE')" disabled>
+          🔵 6. Scene BLUE (0xA5)
+        </button>
+
+        <button class="btn btn-danger" onclick="send([0x7e, 0x00, 0x05, 0x03, 255, 0, 0, 0x00, 0xef], '7E RED')" disabled>
+          🔴 7. 0x7E RED
+        </button>
+        <button class="btn btn-green" onclick="send([0x7e, 0x00, 0x05, 0x03, 0, 255, 0, 0x00, 0xef], '7E GREEN')" disabled>
+          🟢 8. 0x7E GREEN
+        </button>
+        <button class="btn btn-danger" onclick="send([0x56, 255, 0, 0, 0x00, 0xf0, 0xaa], '56 RED')" disabled>
+          🔴 9. 0x56 RED
+        </button>
+
+        <button class="btn btn-dark" onclick="send([0xA5, 0x02, 0x14, 0x00, 0x00, (0xA5+2+20)&0xFF, 0x5A], 'Speed 20')" disabled>
+          ⏱️ 10. Speed 20
+        </button>
+        <button class="btn btn-dark" onclick="send([0xA5, 0x02, 0x04, 0x00, 0x00, (0xA5+2+4)&0xFF, 0x5A], 'Speed 4')" disabled>
+          ⏱️ 11. Speed 4
+        </button>
+        <button class="btn btn-gold" onclick="send([0xA5, 0x05, 0x01, 0x00, 0x00, 0xAB, 0x5A], 'Play/Start')" disabled>
+          ⚡ 12. Play / Start
+        </button>
+      </div>
+    </div>
+
+    <!-- Logs -->
+    <div class="card">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+        <span style="font-size: 0.85rem; color: var(--text-dim);">Live Bluetooth Packet Log</span>
+        <button class="btn btn-dark" style="padding: 2px 8px; font-size: 0.75rem;" onclick="clearLogs()">Clear</button>
+      </div>
+      <div id="logBox" class="log-box">Ready. Click 'Connect (XB-Led)' to begin testing.</div>
+    </div>
+  </div>
+
+  <script>
+    const SERVICE_FFF0 = "0000fff0-0000-1000-8000-00805f9b34fb";
+    const CHAR_FFF2    = "0000fff2-0000-1000-8000-00805f9b34fb";
+    const SERVICE_AE00 = "0000ae00-0000-1000-8000-00805f9b34fb";
+    const CHAR_AE01    = "0000ae01-0000-1000-8000-00805f9b34fb";
+
+    const ALL_OPTIONAL_SERVICES = [SERVICE_FFF0, SERVICE_AE00, 0xfff0, 0xae00];
+
+    let bleDevice = null;
+    let charFFF2 = null;
+    let charAE01 = null;
+
+    function log(msg) {
+      const box = document.getElementById("logBox");
+      const time = new Date().toLocaleTimeString();
+      box.textContent += `\n[${time}] ${msg}`;
+      box.scrollTop = box.scrollHeight;
+    }
+
+    function clearLogs() {
+      document.getElementById("logBox").textContent = "Logs cleared.";
+    }
+
+    function setConnectedUI(connected, name = "") {
+      const badge = document.getElementById("statusBadge");
+      const text = document.getElementById("statusText");
+      const btnConnect = document.getElementById("btnConnect");
+      const btnDisconnect = document.getElementById("btnDisconnect");
+      const buttons = document.querySelectorAll("#controlPanel button");
+
+      if (connected) {
+        badge.className = "status-badge connected";
+        text.textContent = "Connected";
+        document.getElementById("devInfo").innerHTML = `Target: <strong>${name} (Display: 024)</strong>`;
+        btnConnect.disabled = true;
+        btnDisconnect.disabled = false;
+        buttons.forEach(b => b.disabled = false);
+      } else {
+        badge.className = "status-badge";
+        text.textContent = "Disconnected";
+        document.getElementById("devInfo").innerHTML = `Target: <strong>XB-Led-1BA1</strong>`;
+        btnConnect.disabled = false;
+        btnDisconnect.disabled = true;
+        buttons.forEach(b => b.disabled = true);
+      }
+    }
+
+    async function connectBle() {
+      if (!navigator.bluetooth) {
+        alert("Please open in Google Chrome on Mac.");
+        return;
+      }
+      try {
+        log("🔍 Scanning for XB-Led-1BA1...");
+        bleDevice = await navigator.bluetooth.requestDevice({
+          filters: [{ namePrefix: 'XB-Led' }, { namePrefix: 'XB' }],
+          optionalServices: ALL_OPTIONAL_SERVICES
+        });
+
+        log(`📱 Selected: ${bleDevice.name}`);
+        bleDevice.addEventListener('gattserverdisconnected', () => {
+          log("⚠️ Device disconnected.");
+          setConnectedUI(false);
+        });
+
+        log("📡 Connecting to GATT Server...");
+        const server = await bleDevice.gatt.connect();
+
+        charFFF2 = null;
+        charAE01 = null;
+
+        try {
+          const s1 = await server.getPrimaryService(SERVICE_FFF0);
+          charFFF2 = await s1.getCharacteristic(CHAR_FFF2);
+          log("✅ Bound to Primary TX Pipe: 0xFFF2");
+        } catch (e) {
+          log(`⚠️ FFF0 Note: ${e.message}`);
+        }
+
+        try {
+          const s2 = await server.getPrimaryService(SERVICE_AE00);
+          charAE01 = await s2.getCharacteristic(CHAR_AE01);
+          log("✅ Bound to Secondary TX Pipe: 0xAE01");
+        } catch (e) {
+          log(`⚠️ AE00 Note: ${e.message}`);
+        }
+
+        if (!charFFF2 && !charAE01) {
+          throw new Error("Could not bind to either 0xFFF2 or 0xAE01.");
+        }
+
+        setConnectedUI(true, bleDevice.name);
+        log("✨ Connected! Try clicking button #1 (Built-In Prog 1) or #4 (Scene RED).");
+      } catch (err) {
+        log(`❌ Connection error: ${err.message}`);
+      }
+    }
+
+    async function disconnectBle() {
+      if (bleDevice && bleDevice.gatt.connected) {
+        bleDevice.gatt.disconnect();
+      }
+      setConnectedUI(false);
+    }
+
+    async function writeToChar(char, u8) {
+      if (!char) return false;
+      try {
+        if (char.properties.writeWithoutResponse) {
+          await char.writeValueWithoutResponse(u8);
+        } else {
+          await char.writeValue(u8);
+        }
+        return true;
+      } catch (e) {
+        try {
+          await char.writeValue(u8);
+          return true;
+        } catch (err) {
+          return false;
+        }
+      }
+    }
+
+    async function send(bytes, label) {
+      const mode = document.getElementById("pipeSelect").value;
+      const u8 = new Uint8Array(bytes);
+      const hex = Array.from(bytes).map(b => '0x' + b.toString(16).padStart(2, '0').toUpperCase()).join(' ');
+
+      if (mode === "FFF2" || mode === "BOTH") {
+        if (charFFF2) {
+          const ok = await writeToChar(charFFF2, u8);
+          log(`⚡ [Pipe 0xFFF2] Sent [${label}]: [ ${hex} ] (${ok ? 'OK' : 'ERR'})`);
+        }
+      }
+      if (mode === "AE01" || mode === "BOTH") {
+        if (charAE01) {
+          const ok = await writeToChar(charAE01, u8);
+          log(`⚡ [Pipe 0xAE01] Sent [${label}]: [ ${hex} ] (${ok ? 'OK' : 'ERR'})`);
+        }
+      }
+      await new Promise(r => setTimeout(r, 40));
+    }
+  </script>
+</body>
+</html>

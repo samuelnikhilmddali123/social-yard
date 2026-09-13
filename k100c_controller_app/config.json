@@ -1,0 +1,57 @@
+{
+  "device_name": "XB-Led-1BA1",
+  "device_name_fallback": "XB-Led",
+  "service_uuid": "0000fff0-0000-1000-8000-00805f9b34fb",
+  "write_char_uuid": "0000fff2-0000-1000-8000-00805f9b34fb",
+  "notify_char_uuid": "0000fff1-0000-1000-8000-00805f9b34fb",
+  "alt_service_uuid": "0000ae00-0000-1000-8000-00805f9b34fb",
+  "alt_write_char_uuid": "0000ae01-0000-1000-8000-00805f9b34fb",
+  "reconnect_interval_sec": 3,
+  "command_delay_ms": 60,
+  "api_port": 8765,
+  "api_host": "127.0.0.1",
+  "light_programs": {
+    "1": {
+      "name": "Light 1 (Program 1)",
+      "hex": "A5 01 00 00 00 A6 5A",
+      "description": "Built-In Program 1 / Effect 1"
+    },
+    "2": {
+      "name": "Light 2 (Program 2)",
+      "hex": "A5 01 01 00 00 A7 5A",
+      "description": "Built-In Program 2 / Effect 2"
+    },
+    "3": {
+      "name": "Light 3 (Program 3)",
+      "hex": "A5 01 02 00 00 A8 5A",
+      "description": "Built-In Program 3 / Effect 3"
+    },
+    "4": {
+      "name": "Light 4 (Program 4)",
+      "hex": "A5 01 03 00 00 A9 5A",
+      "description": "Built-In Program 4 / Effect 4"
+    }
+  },
+  "hardware_buttons": {
+    "chip": {
+      "name": "CHIP",
+      "hex": "A5 06 01 00 00 AC 5A",
+      "description": "Trigger physical CHIP/SET button"
+    },
+    "mode": {
+      "name": "MODE",
+      "hex": "A5 03 01 00 00 A9 5A",
+      "description": "Trigger physical MODE switch button"
+    },
+    "speed_up": {
+      "name": "SPEED +",
+      "hex": "A5 02 01 00 00 A8 5A",
+      "description": "Trigger physical SPEED+ button"
+    },
+    "speed_down": {
+      "name": "SPEED -",
+      "hex": "A5 02 00 00 00 A7 5A",
+      "description": "Trigger physical SPEED- button"
+    }
+  }
+}

@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>K-1000C Smart LED Controller</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div class="app-container">
+    <!-- Header -->
+    <header class="header">
+      <div class="brand">
+        <div class="logo-icon">🎛️</div>
+        <div>
+          <h1>K-1000C Controller</h1>
+          <p class="subtitle">Mac Bluetooth LE Bridge & Web Control</p>
+        </div>
+      </div>
+
+      <div class="status-wrapper">
+        <div id="connectionBadge" class="status-badge disconnected">
+          <span class="status-pulse"></span>
+          <span id="statusText">DISCONNECTED</span>
+        </div>
+        <div id="deviceSubtext" class="device-subtext">Connecting to bridge...</div>
+      </div>
+    </header>
+
+    <!-- Error Alert Box -->
+    <div id="errorBanner" class="alert-banner hidden">
+      <div class="alert-icon">⚠️</div>
+      <div class="alert-content">
+        <strong id="errorTitle">Connection Warning</strong>
+        <p id="errorMessage">Unable to communicate with K-1000C controller.</p>
+      </div>
+      <button class="alert-close" onclick="dismissError()">✕</button>
+    </div>
+
+    <!-- Active Program Status Banner -->
+    <section class="active-program-card">
+      <div class="card-label">CURRENT STATUS</div>
+      <div class="program-status-row">
+        <div class="active-badge" id="activeProgramBadge">
+          <span class="sparkle">✨</span>
+          <span id="activeProgramText">No Program Selected</span>
+        </div>
+        <div class="state-feedback" id="feedbackMessage">Ready for command</div>
+      </div>
+    </section>
+
+    <!-- Light Program Control Grid -->
+    <section class="main-controls-card">
+      <div class="section-header">
+        <h2>💡 Program Selector</h2>
+        <span class="section-hint">Select which LED pattern is active</span>
+      </div>
+
+      <div class="button-grid">
+        <button id="btnLight1" class="light-btn" onclick="selectLight(1)">
+          <div class="btn-top">
+            <span class="light-num">01</span>
+            <span class="btn-indicator" id="ind1"></span>
+          </div>
+          <div class="light-title" id="title1">LIGHT 1</div>
+          <div class="light-desc" id="desc1">Program / Light 1</div>
+          <div class="btn-footer">
+            <span class="action-tag">Activate</span>
+            <span class="hex-preview" id="hex1">HEX: A5 01 00...</span>
+          </div>
+        </button>
+
+        <button id="btnLight2" class="light-btn" onclick="selectLight(2)">
+          <div class="btn-top">
+            <span class="light-num">02</span>
+            <span class="btn-indicator" id="ind2"></span>
+          </div>
+          <div class="light-title" id="title2">LIGHT 2</div>
+          <div class="light-desc" id="desc2">Program / Light 2</div>
+          <div class="btn-footer">
+            <span class="action-tag">Activate</span>
+            <span class="hex-preview" id="hex2">HEX: A5 01 01...</span>
+          </div>
+        </button>
+
+        <button id="btnLight3" class="light-btn" onclick="selectLight(3)">
+          <div class="btn-top">
+            <span class="light-num">03</span>
+            <span class="btn-indicator" id="ind3"></span>
+          </div>
+          <div class="light-title" id="title3">LIGHT 3</div>
+          <div class="light-desc" id="desc3">Program / Light 3</div>
+          <div class="btn-footer">
+            <span class="action-tag">Activate</span>
+            <span class="hex-preview" id="hex3">HEX: A5 01 02...</span>
+          </div>
+        </button>
+
+        <button id="btnLight4" class="light-btn" onclick="selectLight(4)">
+          <div class="btn-top">
+            <span class="light-num">04</span>
+            <span class="btn-indicator" id="ind4"></span>
+          </div>
+          <div class="light-title" id="title4">LIGHT 4</div>
+          <div class="light-desc" id="desc4">Program / Light 4</div>
+          <div class="btn-footer">
+            <span class="action-tag">Activate</span>
+            <span class="hex-preview" id="hex4">HEX: A5 01 03...</span>
+          </div>
+        </button>
+      </div>
+    </section>
+
+    <!-- Physical Controller Buttons (Front Panel Replication) -->
+    <section class="hardware-panel-card">
+      <div class="section-header">
+        <h2>🎛️ Physical Controller Panel</h2>
+        <span class="section-hint">Trigger the 4 hardware buttons on the front of the K-1000C</span>
+      </div>
+
+      <div class="hw-button-grid">
+        <button id="btnHwChip" class="hw-btn hw-btn-chip" onclick="triggerHardwareButton('chip')">
+          <div class="hw-btn-icon">⚙️</div>
+          <div class="hw-btn-name">CHIP</div>
+          <div class="hw-btn-sub">Chip / Group Select</div>
+        </button>
+
+        <button id="btnHwMode" class="hw-btn hw-btn-mode" onclick="triggerHardwareButton('mode')">
+          <div class="hw-btn-icon">🔄</div>
+          <div class="hw-btn-name">MODE</div>
+          <div class="hw-btn-sub">Next Effect / Pattern</div>
+        </button>
+
+        <button id="btnHwSpeedUp" class="hw-btn hw-btn-speed" onclick="triggerHardwareButton('speed_up')">
+          <div class="hw-btn-icon">⚡</div>
+          <div class="hw-btn-name">SPEED +</div>
+          <div class="hw-btn-sub">Faster Playback</div>
+        </button>
+
+        <button id="btnHwSpeedDown" class="hw-btn hw-btn-speed" onclick="triggerHardwareButton('speed_down')">
+          <div class="hw-btn-icon">🐢</div>
+          <div class="hw-btn-name">SPEED -</div>
+          <div class="hw-btn-sub">Slower Playback</div>
+        </button>
+      </div>
+    </section>
+
+    <!-- Protocol Discovery & Replay Studio -->
+    <section class="discovery-card">
+      <div class="discovery-header" onclick="toggleDiscovery()">
+        <div class="discovery-title">
+          <span>🔬 Protocol Discovery & Replay Studio</span>
+          <span class="tag-pill">Capture / Replay</span>
+        </div>
+        <button class="toggle-arrow" id="discoveryArrow">▼</button>
+      </div>
+
+      <div id="discoveryBody" class="discovery-body">
+        <p class="discovery-intro">
+          Use this console to enter custom hex command byte sequences, test responses, and map discovered packets to Light 1..4 buttons.
+        </p>
+
+        <div class="raw-send-row">
+          <input type="text" id="rawHexInput" class="hex-input" placeholder="e.g. A5 01 00 00 00 A6 5A" value="A5 01 00 00 00 A6 5A">
+          <button class="btn-action send-btn" onclick="sendRawHex()">⚡ Send Hex</button>
+          
+          <div class="assign-dropdown-wrapper">
+            <select id="assignLightSelect" class="assign-select">
+              <optgroup label="Light Programs">
+                <option value="1">Save as Light 1</option>
+                <option value="2">Save as Light 2</option>
+                <option value="3">Save as Light 3</option>
+                <option value="4">Save as Light 4</option>
+              </optgroup>
+              <optgroup label="Hardware Panel Buttons">
+                <option value="btn_chip">Save as CHIP</option>
+                <option value="btn_mode">Save as MODE</option>
+                <option value="btn_speed_up">Save as SPEED +</option>
+                <option value="btn_speed_down">Save as SPEED -</option>
+              </optgroup>
+            </select>
+            <button class="btn-action save-btn" onclick="saveAsLightMapping()">💾 Save</button>
+          </div>
+        </div>
+
+        <div class="quick-presets">
+          <span class="presets-label">Quick Button & Mode Probes:</span>
+          <button class="preset-pill" onclick="loadPreset('4D 4F 44 45', 'ASCII: MODE')">ASCII: MODE</button>
+          <button class="preset-pill" onclick="loadPreset('53 45 54', 'ASCII: SET')">ASCII: SET</button>
+          <button class="preset-pill" onclick="loadPreset('53 50 45 45 44 2B', 'ASCII: SPEED+')">ASCII: SPEED+</button>
+          <button class="preset-pill" onclick="loadPreset('01', 'Byte 0x01 (MODE)')">0x01 (MODE)</button>
+          <button class="preset-pill" onclick="loadPreset('02', 'Byte 0x02 (SPEED+)')">0x02 (SPEED+)</button>
+          <button class="preset-pill" onclick="loadPreset('03', 'Byte 0x03 (SPEED-)')">0x03 (SPEED-)</button>
+          <button class="preset-pill" onclick="loadPreset('04', 'Byte 0x04 (CHIP)')">0x04 (CHIP)</button>
+          <button class="preset-pill" onclick="loadPreset('AA 02 01 FF', 'AA: MODE')">AA: MODE</button>
+          <button class="preset-pill" onclick="loadPreset('AA 03 01 FF', 'AA: SPEED+')">AA: SPEED+</button>
+          <button class="preset-pill" onclick="loadPreset('7E 00 03 01 64 00 00 00 EF', '7E: MODE')">7E: MODE</button>
+          <button class="preset-pill" onclick="loadPreset('A5 03 01 00 00 A9 5A', 'A5: MODE')">A5: MODE</button>
+        </div>
+
+        <!-- Live Stream Logs -->
+        <div class="console-box">
+          <div class="console-top">
+            <span>📡 Live BLE Traffic & Notification Stream</span>
+            <button class="clear-btn" onclick="clearLogs()">Clear</button>
+          </div>
+          <div id="consoleLog" class="console-content">
+            <div class="log-line info">[System] Waiting for BLE events...</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="footer">
+      <div>K-1000C Bluetooth Controller Bridge &bull; Port 8765</div>
+      <div id="lastReadState" class="last-read-tag">Initial State: ----</div>
+    </footer>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

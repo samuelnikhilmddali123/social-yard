@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<SSSP>
+    <ver>1.0</ver>
+    <action>install</action>
+    <type>web</type>
+    <name>E3Di Screen Player</name>
+    <url>./e3di-screen.wgt</url>
+</SSSP>

@@ -1,0 +1,1346 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "E3Di & Jaan LED Screen IoT Ad-Network Platform API",
+    "description": "Comprehensive REST & IoT API documentation for the E3Di Smart Pole, Digital Billboard Network, Edge Gateways, CCTV surveillance, and Emergency SOS infrastructure.",
+    "version": "2.0.0",
+    "contact": {
+      "name": "E3Di Platform Support",
+      "url": "https://e3di.org"
+    }
+  },
+  "servers": [
+    {
+      "url": "https://api.e3di.org",
+      "description": "Production LED CPU API Server"
+    },
+    {
+      "url": "http://localhost:5000",
+      "description": "Local Development Server (Port 5000)"
+    },
+    {
+      "url": "http://localhost:5001",
+      "description": "Alternative Local Server (Port 5001)"
+    }
+  ],
+  "tags": [
+    { "name": "IoT Device & Screens", "description": "IoT Player endpoints, playlist sync, live frame capture, and BLE hardware controller bridge" },
+    { "name": "IoT Edge Gateway", "description": "Multi-site edge agent gateway, telemetry, heartbeats, and raw HLS video segment streaming" },
+    { "name": "IoT CCTV & Streaming", "description": "Real-time HLS video feeds, camera lifecycle sessions, WebRTC signaling, and surveillance recordings" },
+    { "name": "IoT Emergency SOS", "description": "Hardware SOS buttons, Telegram alerts, real-time LED screen override, and emergency telemetry" },
+    { "name": "Corridors & Smart Poles", "description": "Smart pole corridors, dynamic pricing tiers, and pole inventory groupings" },
+    { "name": "Screens & Billboards Inventory", "description": "Physical LED screen provisioning, coordinates, pole binding, and display settings" },
+    { "name": "Campaigns & Booking", "description": "User ad booking, slot availability checks, pricing estimation, and payment processing" },
+    { "name": "Admin Campaign Management", "description": "Campaign review, approval, rejection, playback revocation, and corridor broadcast sync" },
+    { "name": "Media & Creatives", "description": "High-resolution video and graphic asset uploads, transcoding, and presigned S3 delivery" },
+    { "name": "Authentication & Profile", "description": "JWT authentication, TOTP 2-factor authentication, profile management, and push notification tokens" },
+    { "name": "Plans & Partnerships", "description": "Advertising duration plans and franchise/landowner partner onboarding" },
+    { "name": "System Health", "description": "Infrastructure status, database connectivity, and subsystem telemetry" }
+  ],
+  "paths": {
+    "/api/device/{deviceId}": {
+      "get": {
+        "tags": ["IoT Device & Screens"],
+        "summary": "Fetch Screen Playlist & Device State",
+        "description": "Called by Android TV Boxes, Raspberry Pis, or Web players to fetch approved active ad playlists, time windows, audio configuration, and device status.",
+        "parameters": [
+          { "name": "deviceId", "in": "path", "required": true, "schema": { "type": "string" }, "example": "ethree-pole1" }
+        ],
+        "responses": {
+          "200": {
+            "description": "Active playlist and screen configuration",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "playlist": {
+                      "type": "array",
+                      "items": { "$ref": "#/components/schemas/PlaylistItem" }
+                    },
+                    "current": { "$ref": "#/components/schemas/PlaylistItem" },
+                    "next": { "$ref": "#/components/schemas/PlaylistItem" },
+                    "screen": { "$ref": "#/components/schemas/DeviceScreenState" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/device/{deviceId}/frame": {
+      "post": {
+        "tags": ["IoT Device & Screens"],
+        "summary": "Upload Device Screen Live Frame",
+        "description": "IoT screen player uploads a base64 or binary snapshot of what is currently displaying for remote monitoring and proof-of-play.",
+        "parameters": [
+          { "name": "deviceId", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["frame"],
+                "properties": {
+                  "frame": { "type": "string", "description": "Data URL or base64 encoded image frame" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Frame received successfully" },
+          "400": { "description": "No frame data provided" }
+        }
+      },
+      "get": {
+        "tags": ["IoT Device & Screens"],
+        "summary": "Get Latest Screen Frame",
+        "description": "Fetches the most recent live frame captured by the IoT screen device.",
+        "parameters": [
+          { "name": "deviceId", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Latest frame data",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "frame": { "type": "string" }
+                  }
+                }
+              }
+            }
+          },
+          "404": { "description": "No frame available or stream offline" }
+        }
+      }
+    },
+    "/api/device/{deviceId}/audio": {
+      "patch": {
+        "tags": ["IoT Device & Screens"],
+        "summary": "Remote Audio Control",
+        "description": "Adjust volume level (0-100) or toggle sound output on the physical LED screen.",
+        "parameters": [
+          { "name": "deviceId", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "soundEnabled": { "type": "boolean" },
+                  "volume": { "type": "integer", "minimum": 0, "maximum": 100 }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Audio configuration updated" },
+          "404": { "description": "Screen not found" }
+        }
+      }
+    },
+    "/api/device/{deviceId}/k100c": {
+      "post": {
+        "tags": ["IoT Device & Screens"],
+        "summary": "Dispatch BLE Command to K100C Hardware Controller",
+        "description": "Sends brightness, power switch, or display mode command via ESP32 BLE cloud bridge to the NovaStar/Colorlight/K100C LED sending card.",
+        "parameters": [
+          { "name": "deviceId", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "power": { "type": "boolean", "example": true },
+                  "brightness": { "type": "integer", "minimum": 0, "maximum": 100, "example": 85 },
+                  "mode": { "type": "string", "example": "normal" },
+                  "command": { "type": "string", "example": "SET_BRIGHTNESS:85" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Command queued and dispatched via WebSocket/BLE" }
+        }
+      }
+    },
+    "/api/device/{deviceId}/k100c/poll": {
+      "get": {
+        "tags": ["IoT Device & Screens"],
+        "summary": "ESP32 WiFi Poll for K100C Commands",
+        "description": "Onboard ESP32 microcontroller polls this endpoint periodically over WiFi to retrieve latest hardware state and BLE commands.",
+        "parameters": [
+          { "name": "deviceId", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Latest hardware state and commands",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "deviceId": { "type": "string" },
+                    "power": { "type": "boolean" },
+                    "brightness": { "type": "integer" },
+                    "mode": { "type": "string" },
+                    "command": { "type": "string" },
+                    "serverTime": { "type": "string" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/device/{deviceId}/k100c/heartbeat": {
+      "post": {
+        "tags": ["IoT Device & Screens"],
+        "summary": "ESP32 BLE Heartbeat & Telemetry",
+        "description": "ESP32 IoT module reports BLE connection health, signal status, and uptime to the server.",
+        "parameters": [
+          { "name": "deviceId", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "bleConnected": { "type": "boolean", "example": true }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Heartbeat registered" }
+        }
+      }
+    },
+    "/api/device/lookup/{domain}": {
+      "get": {
+        "tags": ["IoT Device & Screens"],
+        "summary": "Lookup Device ID by Domain",
+        "parameters": [
+          { "name": "domain", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": { "description": "Device ID found" },
+          "404": { "description": "No screen mapped to this domain" }
+        }
+      }
+    },
+    "/api/device/clear/all-ads": {
+      "all": {
+        "tags": ["IoT Device & Screens"],
+        "summary": "Clear All Active Ads",
+        "description": "Administrative utility to transition all active schedules to completed.",
+        "responses": {
+          "200": { "description": "Ads cleared successfully" }
+        }
+      }
+    },
+    "/api/edges/upload-segment": {
+      "post": {
+        "tags": ["IoT Edge Gateway"],
+        "summary": "Upload Raw Binary HLS Video Segment",
+        "description": "Edge agent gateway uploads binary `.ts` MPEG-2 video transport segments directly from local RTSP CCTV streams with atomic write.",
+        "parameters": [
+          { "name": "x-camera-id", "in": "header", "required": true, "schema": { "type": "string" } },
+          { "name": "x-filename", "in": "header", "required": true, "schema": { "type": "string" } },
+          { "name": "x-edge-id", "in": "header", "schema": { "type": "string" } }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "*/*": {
+              "schema": { "type": "string", "format": "binary" }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Segment written successfully" },
+          "400": { "description": "Missing camera ID, filename or body" }
+        }
+      }
+    },
+    "/api/admin/edges/register": {
+      "post": {
+        "tags": ["IoT Edge Gateway"],
+        "summary": "Register Edge Agent Gateway",
+        "description": "Registers a new site-level edge agent gateway responsible for local CCTV RTSP ingest and LED screen monitoring.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["edgeId", "siteId"],
+                "properties": {
+                  "edgeId": { "type": "string", "example": "EDGE-001" },
+                  "siteId": { "type": "string", "example": "SITE-001" },
+                  "name": { "type": "string", "example": "Vijayawada MG Road Gateway" },
+                  "agentVersion": { "type": "string", "example": "1.0.0" },
+                  "localIp": { "type": "string", "example": "192.168.1.107" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Edge agent registered successfully" }
+        }
+      }
+    },
+    "/api/edges/{edgeId}/heartbeat": {
+      "post": {
+        "tags": ["IoT Edge Gateway"],
+        "summary": "Edge Agent Heartbeat & Telemetry",
+        "description": "Reports edge gateway CPU load, memory utilization, active RTSP transcode streams, and CCTV health.",
+        "parameters": [
+          { "name": "edgeId", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "cpuUsage": { "type": "number", "example": 24.5 },
+                  "memoryUsage": { "type": "number", "example": 42.1 },
+                  "activeStreams": { "type": "integer", "example": 2 },
+                  "cameraStatus": { "type": "string", "example": "online" },
+                  "uptime": { "type": "number", "example": 86400 }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Heartbeat accepted" }
+        }
+      }
+    },
+    "/api/admin/edges": {
+      "get": {
+        "tags": ["IoT Edge Gateway"],
+        "summary": "List All Registered Edge Gateways",
+        "security": [{ "bearerAuth": [] }],
+        "responses": {
+          "200": {
+            "description": "List of edge agents across all sites",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "edges": {
+                      "type": "array",
+                      "items": { "$ref": "#/components/schemas/EdgeAgent" }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/edges/{edgeId}/status": {
+      "get": {
+        "tags": ["IoT Edge Gateway"],
+        "summary": "Get Single Edge Gateway Status",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "edgeId", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": { "description": "Edge agent details", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/EdgeAgent" } } } },
+          "404": { "description": "Edge agent not found" }
+        }
+      }
+    },
+    "/api/cameras/live.m3u8": {
+      "get": {
+        "tags": ["IoT CCTV & Streaming"],
+        "summary": "Primary CCTV HLS Stream Playlist",
+        "description": "Delivers an Apple HLS m3u8 playlist manifest for live CCTV playback in VLC, HTML5 video, or mobile players.",
+        "responses": {
+          "200": { "description": "HLS playlist manifest", "content": { "application/vnd.apple.mpegurl": {} } }
+        }
+      }
+    },
+    "/api/cameras/{id}/live.m3u8": {
+      "get": {
+        "tags": ["IoT CCTV & Streaming"],
+        "summary": "Camera Specific HLS Stream",
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" }, "example": "sparsh-pole1" }
+        ],
+        "responses": {
+          "200": { "description": "HLS playlist", "content": { "application/vnd.apple.mpegurl": {} } }
+        }
+      }
+    },
+    "/api/cameras/{id}/hls/{filename}": {
+      "get": {
+        "tags": ["IoT CCTV & Streaming"],
+        "summary": "Serve HLS Manifest or MPEG-TS Segment",
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } },
+          { "name": "filename", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": { "description": "Segment or playlist file" },
+          "204": { "description": "Segment rotated out of rolling buffer" },
+          "503": { "description": "Stream segment initializing" }
+        }
+      }
+    },
+    "/api/cameras": {
+      "get": {
+        "tags": ["IoT CCTV & Streaming"],
+        "summary": "List All CCTV Cameras",
+        "security": [{ "bearerAuth": [] }],
+        "responses": {
+          "200": {
+            "description": "List of CCTV cameras with health status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": { "$ref": "#/components/schemas/Camera" }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/cameras/{id}/status": {
+      "get": {
+        "tags": ["IoT CCTV & Streaming"],
+        "summary": "Get Camera Status & Telemetry",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": { "description": "Camera status details" }
+        }
+      }
+    },
+    "/api/cameras/{id}/session": {
+      "post": {
+        "tags": ["IoT CCTV & Streaming"],
+        "summary": "Create Video Stream Session",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": { "description": "Stream session created" }
+        }
+      }
+    },
+    "/api/cameras/{id}/record/start": {
+      "post": {
+        "tags": ["IoT CCTV & Streaming"],
+        "summary": "Start Incident CCTV Recording",
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": { "description": "Recording started" }
+        }
+      }
+    },
+    "/api/cameras/{id}/record/stop": {
+      "post": {
+        "tags": ["IoT CCTV & Streaming"],
+        "summary": "Stop Incident CCTV Recording",
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": { "description": "Recording stopped and saved" }
+        }
+      }
+    },
+    "/api/cameras/{id}/recordings": {
+      "get": {
+        "tags": ["IoT CCTV & Streaming"],
+        "summary": "List Saved Camera Recordings",
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": { "description": "List of recorded clips" }
+        }
+      }
+    },
+    "/api/sos": {
+      "post": {
+        "tags": ["IoT Emergency SOS"],
+        "summary": "Trigger Emergency SOS Alert",
+        "description": "Triggered by physical hardware ESP32 SOS button or Web client. Immediately sends Telegram notification, dispatches emergency CCTV footage, and broadcasts screen display override.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "device": { "type": "string", "example": "ESP32-SOS-01" },
+                  "status": { "type": "string", "example": "Active Emergency" },
+                  "battery": { "type": "number", "example": 95 },
+                  "poleId": { "type": "string", "example": "ETHREE-POLE1" },
+                  "location": { "type": "string", "example": "Vijayawada MG Road Corridor" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": { "description": "SOS alert registered and dispatched" }
+        }
+      },
+      "get": {
+        "tags": ["IoT Emergency SOS"],
+        "summary": "Get All SOS Alerts",
+        "parameters": [
+          { "name": "status", "in": "query", "schema": { "type": "string" } },
+          { "name": "resolved", "in": "query", "schema": { "type": "boolean" } },
+          { "name": "search", "in": "query", "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of SOS alerts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": { "$ref": "#/components/schemas/SosAlert" }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/sos/status": {
+      "get": {
+        "tags": ["IoT Emergency SOS"],
+        "summary": "Get SOS Health & Metrics",
+        "responses": {
+          "200": {
+            "description": "System health and active emergency metrics",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": { "type": "string" },
+                    "activeEmergencies": { "type": "integer" },
+                    "metrics": {
+                      "type": "object",
+                      "properties": {
+                        "totalAlerts": { "type": "integer" },
+                        "todayAlerts": { "type": "integer" },
+                        "activeAlerts": { "type": "integer" }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/sos/resolve/{id}": {
+      "post": {
+        "tags": ["IoT Emergency SOS"],
+        "summary": "Mark SOS Alert Resolved",
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": { "description": "Alert resolved" },
+          "404": { "description": "Alert not found" }
+        }
+      }
+    },
+    "/api/sos/clear": {
+      "post": {
+        "tags": ["IoT Emergency SOS"],
+        "summary": "Clear All Active SOS Alerts",
+        "responses": {
+          "200": { "description": "All alerts cleared" }
+        }
+      }
+    },
+    "/api/corridors/pricing": {
+      "get": {
+        "tags": ["Corridors & Smart Poles"],
+        "summary": "Get Public Corridor Pricing Tiers",
+        "description": "Returns verified pricing per 5-second and 30-second slot for each smart pole corridor.",
+        "responses": {
+          "200": {
+            "description": "Pricing tiers by corridor",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": { "$ref": "#/components/schemas/CorridorPricing" }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/corridors": {
+      "get": {
+        "tags": ["Corridors & Smart Poles"],
+        "summary": "List All Corridors with Pole Counts",
+        "security": [{ "bearerAuth": [] }],
+        "responses": {
+          "200": {
+            "description": "Corridor list with inventory stats"
+          }
+        }
+      }
+    },
+    "/api/corridors/{id}/poles": {
+      "get": {
+        "tags": ["Corridors & Smart Poles"],
+        "summary": "Get Poles & Screens in Corridor",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": { "description": "Screens and live stream URLs inside corridor" }
+        }
+      }
+    },
+    "/api/corridors/{id}": {
+      "put": {
+        "tags": ["Corridors & Smart Poles"],
+        "summary": "Update Corridor Pricing & Metadata",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "pricePer5Sec": { "type": "number" },
+                  "pricePer30Sec": { "type": "number" },
+                  "city": { "type": "string" },
+                  "area": { "type": "string" },
+                  "isActive": { "type": "boolean" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Corridor updated" }
+        }
+      }
+    },
+    "/api/screens": {
+      "get": {
+        "tags": ["Screens & Billboards Inventory"],
+        "summary": "List All LED Screens",
+        "responses": {
+          "200": {
+            "description": "List of screen displays",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": { "$ref": "#/components/schemas/Screen" }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": ["Screens & Billboards Inventory"],
+        "summary": "Create Single LED Screen",
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/ScreenInput" }
+            }
+          }
+        },
+        "responses": {
+          "201": { "description": "Screen created" }
+        }
+      }
+    },
+    "/api/screens/pole": {
+      "post": {
+        "tags": ["Screens & Billboards Inventory"],
+        "summary": "Provision Smart Pole with Dual Screens (Side A & Side B)",
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["poleId", "corridorName", "city", "area", "lat", "lng"],
+                "properties": {
+                  "poleId": { "type": "string", "example": "ETHREE-POLE3" },
+                  "corridorName": { "type": "string", "example": "MG Road" },
+                  "city": { "type": "string", "example": "Vijayawada" },
+                  "area": { "type": "string", "example": "Benz Circle" },
+                  "lat": { "type": "number", "example": 16.5062 },
+                  "lng": { "type": "number", "example": 80.6480 },
+                  "cctvCameraId": { "type": "string", "example": "sparsh-pole3" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": { "description": "Pole and both screens created successfully" }
+        }
+      }
+    },
+    "/api/screens/{id}": {
+      "put": {
+        "tags": ["Screens & Billboards Inventory"],
+        "summary": "Update Screen",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "responses": { "200": { "description": "Screen updated" } }
+      },
+      "delete": {
+        "tags": ["Screens & Billboards Inventory"],
+        "summary": "Delete Screen",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "responses": { "200": { "description": "Screen deleted" } }
+      }
+    },
+    "/api/billboards": {
+      "get": {
+        "tags": ["Screens & Billboards Inventory"],
+        "summary": "List All Billboards",
+        "responses": {
+          "200": {
+            "description": "Billboard assets",
+            "content": { "application/json": { "schema": { "type": "array", "items": { "$ref": "#/components/schemas/Billboard" } } } }
+          }
+        }
+      },
+      "post": {
+        "tags": ["Screens & Billboards Inventory"],
+        "summary": "Create Billboard Asset",
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/BillboardInput" } } }
+        },
+        "responses": { "201": { "description": "Billboard created" } }
+      }
+    },
+    "/api/billboards/{id}": {
+      "delete": {
+        "tags": ["Screens & Billboards Inventory"],
+        "summary": "Delete Billboard",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "responses": { "204": { "description": "Billboard deleted" } }
+      }
+    },
+    "/api/schedule/check-availability": {
+      "post": {
+        "tags": ["Campaigns & Booking"],
+        "summary": "Check Slot Availability for Screen Dates",
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["screenId", "dates"],
+                "properties": {
+                  "screenId": { "type": "string" },
+                  "dates": { "type": "array", "items": { "type": "string", "format": "date" } }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Availability report with remaining seconds and status" }
+        }
+      }
+    },
+    "/api/schedule/calculate-total": {
+      "post": {
+        "tags": ["Campaigns & Booking"],
+        "summary": "Calculate Campaign Pricing & GST",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["screenIds", "dates", "durationSeconds"],
+                "properties": {
+                  "screenIds": { "type": "array", "items": { "type": "string" } },
+                  "dates": { "type": "array", "items": { "type": "string" } },
+                  "durationSeconds": { "type": "integer" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Subtotal, GST, and final price breakdown" }
+        }
+      }
+    },
+    "/api/schedule/campaign": {
+      "post": {
+        "tags": ["Campaigns & Booking"],
+        "summary": "Submit New Ad Campaign Booking",
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/CampaignInput" }
+            }
+          }
+        },
+        "responses": {
+          "201": { "description": "Campaign booked successfully with payment gateway link" }
+        }
+      }
+    },
+    "/api/schedule/payment/success": {
+      "post": {
+        "tags": ["Campaigns & Booking"],
+        "summary": "Payment Webhook Success Handler",
+        "responses": { "200": { "description": "Payment confirmed and campaign activated" } }
+      }
+    },
+    "/api/schedule": {
+      "get": {
+        "tags": ["Campaigns & Booking"],
+        "summary": "List User's Booked Campaigns",
+        "security": [{ "bearerAuth": [] }],
+        "responses": {
+          "200": { "description": "User schedules" }
+        }
+      }
+    },
+    "/api/admin/campaigns/counts": {
+      "get": {
+        "tags": ["Admin Campaign Management"],
+        "summary": "Get Campaign Status Tallies",
+        "security": [{ "bearerAuth": [] }],
+        "responses": {
+          "200": { "description": "Counts for pending, approved, active, rejected, and completed" }
+        }
+      }
+    },
+    "/api/admin/campaigns/pending": {
+      "get": {
+        "tags": ["Admin Campaign Management"],
+        "summary": "List Pending Review Campaigns",
+        "security": [{ "bearerAuth": [] }],
+        "responses": { "200": { "description": "Pending campaigns" } }
+      }
+    },
+    "/api/admin/campaigns/active": {
+      "get": {
+        "tags": ["Admin Campaign Management"],
+        "summary": "List Currently Airing Campaigns",
+        "security": [{ "bearerAuth": [] }],
+        "responses": { "200": { "description": "Active campaigns" } }
+      }
+    },
+    "/api/admin/campaigns/{id}/approve": {
+      "patch": {
+        "tags": ["Admin Campaign Management"],
+        "summary": "Approve Campaign for Airing",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "responses": { "200": { "description": "Campaign approved and pushed to screens" } }
+      }
+    },
+    "/api/admin/campaigns/{id}/reject": {
+      "patch": {
+        "tags": ["Admin Campaign Management"],
+        "summary": "Reject Campaign",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "requestBody": {
+          "content": { "application/json": { "schema": { "type": "object", "properties": { "rejectionReason": { "type": "string" } } } } }
+        },
+        "responses": { "200": { "description": "Campaign rejected" } }
+      }
+    },
+    "/api/admin/campaigns/{id}/revoke": {
+      "patch": {
+        "tags": ["Admin Campaign Management"],
+        "summary": "Revoke Approved Campaign",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "responses": { "200": { "description": "Campaign revoked and stopped immediately" } }
+      }
+    },
+    "/api/admin/campaigns/corridor-state": {
+      "get": {
+        "tags": ["Admin Campaign Management"],
+        "summary": "Real-time Corridor Broadcast Playback State",
+        "security": [{ "bearerAuth": [] }],
+        "responses": { "200": { "description": "Broadcast synchronization state across corridor poles" } }
+      }
+    },
+    "/api/videos/upload": {
+      "post": {
+        "tags": ["Media & Creatives"],
+        "summary": "Upload Video or Image Ad Creative",
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": ["video"],
+                "properties": {
+                  "title": { "type": "string" },
+                  "video": { "type": "string", "format": "binary" },
+                  "thumbnail": { "type": "string", "format": "binary" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Media uploaded and processed", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/VideoMedia" } } } }
+        }
+      }
+    },
+    "/api/videos": {
+      "get": {
+        "tags": ["Media & Creatives"],
+        "summary": "List User Creatives",
+        "security": [{ "bearerAuth": [] }],
+        "responses": {
+          "200": { "description": "List of creatives", "content": { "application/json": { "schema": { "type": "array", "items": { "$ref": "#/components/schemas/VideoMedia" } } } } }
+        }
+      }
+    },
+    "/api/auth/register": {
+      "post": {
+        "tags": ["Authentication & Profile"],
+        "summary": "User Registration",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["name", "email", "password"],
+                "properties": {
+                  "name": { "type": "string" },
+                  "email": { "type": "string", "format": "email" },
+                  "password": { "type": "string", "format": "password" },
+                  "phone": { "type": "string" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Registered successfully with JWT token" },
+          "400": { "description": "User already exists or validation error" }
+        }
+      }
+    },
+    "/api/auth/login": {
+      "post": {
+        "tags": ["Authentication & Profile"],
+        "summary": "User & Admin Login",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["email", "password"],
+                "properties": {
+                  "email": { "type": "string", "format": "email" },
+                  "password": { "type": "string", "format": "password" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Authentication successful (or requires2FA challenge)" },
+          "401": { "description": "Invalid credentials" }
+        }
+      }
+    },
+    "/api/auth/google-login": {
+      "post": {
+        "tags": ["Authentication & Profile"],
+        "summary": "Google OAuth Sign-In",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["token"],
+                "properties": {
+                  "token": { "type": "string", "description": "Google ID Token" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Logged in with Google" }
+        }
+      }
+    },
+    "/api/auth/me": {
+      "get": {
+        "tags": ["Authentication & Profile"],
+        "summary": "Get Current Authenticated User",
+        "security": [{ "bearerAuth": [] }],
+        "responses": {
+          "200": { "description": "Current user profile" },
+          "401": { "description": "Unauthorized" }
+        }
+      }
+    },
+    "/api/auth/setup-2fa": {
+      "get": {
+        "tags": ["Authentication & Profile"],
+        "summary": "Generate TOTP 2FA Secret & QR",
+        "security": [{ "bearerAuth": [] }],
+        "responses": { "200": { "description": "Secret and QR data URL" } }
+      }
+    },
+    "/api/auth/confirm-2fa": {
+      "post": {
+        "tags": ["Authentication & Profile"],
+        "summary": "Confirm & Enable 2FA",
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "type": "object", "required": ["token"], "properties": { "token": { "type": "string" } } } } }
+        },
+        "responses": { "200": { "description": "2FA activated" } }
+      }
+    },
+    "/api/auth/verify-2fa": {
+      "post": {
+        "tags": ["Authentication & Profile"],
+        "summary": "Verify 2FA Code During Login Challenge",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["tempToken", "token"],
+                "properties": {
+                  "tempToken": { "type": "string" },
+                  "token": { "type": "string", "description": "6-digit TOTP code" }
+                }
+              }
+            }
+          }
+        },
+        "responses": { "200": { "description": "JWT issued" } }
+      }
+    },
+    "/api/plans": {
+      "get": {
+        "tags": ["Plans & Partnerships"],
+        "summary": "List Ad Campaign Pricing Plans",
+        "responses": { "200": { "description": "Pricing plans" } }
+      }
+    },
+    "/api/partner-requests": {
+      "post": {
+        "tags": ["Plans & Partnerships"],
+        "summary": "Submit Partner Application",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": ["name", "email", "phone"],
+                "properties": {
+                  "name": { "type": "string" },
+                  "email": { "type": "string" },
+                  "phone": { "type": "string" },
+                  "address": { "type": "string" },
+                  "propertyType": { "type": "string" }
+                }
+              }
+            }
+          }
+        },
+        "responses": { "201": { "description": "Partner application received" } }
+      }
+    },
+    "/api/health": {
+      "get": {
+        "tags": ["System Health"],
+        "summary": "API Gateway Health Check",
+        "responses": {
+          "200": {
+            "description": "Service online",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": { "type": "string", "example": "ok" },
+                    "service": { "type": "string", "example": "e3di-api" },
+                    "timestamp": { "type": "string" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/health/dependencies": {
+      "get": {
+        "tags": ["System Health"],
+        "summary": "Database & Microservices Health",
+        "responses": {
+          "200": {
+            "description": "Status of database, edge service, and media gateway",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "api": { "type": "string", "example": "ok" },
+                    "database": { "type": "string", "example": "ok" },
+                    "edgeService": { "type": "string", "example": "ok" },
+                    "mediaService": { "type": "string", "example": "ok" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "description": "Enter your JWT token in the format: Bearer <token>"
+      }
+    },
+    "schemas": {
+      "PlaylistItem": {
+        "type": "object",
+        "properties": {
+          "_id": { "type": "string" },
+          "scheduleId": { "type": "string" },
+          "title": { "type": "string" },
+          "url": { "type": "string" },
+          "durationSeconds": { "type": "integer" },
+          "hasWatermark": { "type": "boolean" },
+          "date": { "type": "string" },
+          "startTime": { "type": "string" },
+          "endTime": { "type": "string" }
+        }
+      },
+      "DeviceScreenState": {
+        "type": "object",
+        "properties": {
+          "deviceId": { "type": "string" },
+          "name": { "type": "string" },
+          "location": { "type": "string" },
+          "status": { "type": "string" },
+          "soundEnabled": { "type": "boolean" },
+          "volume": { "type": "integer" }
+        }
+      },
+      "EdgeAgent": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "edgeId": { "type": "string" },
+          "siteId": { "type": "string" },
+          "name": { "type": "string" },
+          "agentVersion": { "type": "string" },
+          "status": { "type": "string", "enum": ["online", "offline"] },
+          "lastSeen": { "type": "string", "format": "date-time" },
+          "telemetry": {
+            "type": "object",
+            "properties": {
+              "cpuUsage": { "type": "number" },
+              "memoryUsage": { "type": "number" },
+              "activeStreams": { "type": "integer" }
+            }
+          }
+        }
+      },
+      "Camera": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "siteId": { "type": "string" },
+          "name": { "type": "string" },
+          "vendor": { "type": "string" },
+          "status": { "type": "string" },
+          "hlsUrl": { "type": "string" }
+        }
+      },
+      "SosAlert": {
+        "type": "object",
+        "properties": {
+          "_id": { "type": "string" },
+          "device": { "type": "string" },
+          "status": { "type": "string" },
+          "battery": { "type": "number" },
+          "poleId": { "type": "string" },
+          "location": { "type": "string" },
+          "resolved": { "type": "boolean" },
+          "createdAt": { "type": "string", "format": "date-time" }
+        }
+      },
+      "CorridorPricing": {
+        "type": "object",
+        "properties": {
+          "corridorId": { "type": "string" },
+          "corridorName": { "type": "string" },
+          "pricePer5Sec": { "type": "number" },
+          "pricePer30Sec": { "type": "number" },
+          "pricePerScreen": { "type": "number" },
+          "city": { "type": "string" },
+          "area": { "type": "string" }
+        }
+      },
+      "Screen": {
+        "type": "object",
+        "properties": {
+          "_id": { "type": "string" },
+          "deviceId": { "type": "string" },
+          "name": { "type": "string" },
+          "location": { "type": "string" },
+          "corridorName": { "type": "string" },
+          "poleId": { "type": "string" },
+          "side": { "type": "string" },
+          "status": { "type": "string" },
+          "lat": { "type": "number" },
+          "lng": { "type": "number" },
+          "soundEnabled": { "type": "boolean" },
+          "volume": { "type": "integer" }
+        }
+      },
+      "ScreenInput": {
+        "type": "object",
+        "required": ["deviceId", "name", "location", "lat", "lng"],
+        "properties": {
+          "deviceId": { "type": "string" },
+          "name": { "type": "string" },
+          "location": { "type": "string" },
+          "corridorName": { "type": "string" },
+          "lat": { "type": "number" },
+          "lng": { "type": "number" }
+        }
+      },
+      "Billboard": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "location": { "type": "string" },
+          "status": { "type": "string" },
+          "price": { "type": "string" },
+          "lat": { "type": "number" },
+          "lng": { "type": "number" }
+        }
+      },
+      "BillboardInput": {
+        "type": "object",
+        "required": ["location", "price", "lat", "lng"],
+        "properties": {
+          "location": { "type": "string" },
+          "price": { "type": "string" },
+          "lat": { "type": "number" },
+          "lng": { "type": "number" }
+        }
+      },
+      "CampaignInput": {
+        "type": "object",
+        "required": ["videoId", "screenIds", "dates", "durationSeconds"],
+        "properties": {
+          "videoId": { "type": "string" },
+          "screenIds": { "type": "array", "items": { "type": "string" } },
+          "dates": { "type": "array", "items": { "type": "string" } },
+          "durationSeconds": { "type": "integer" },
+          "startTime": { "type": "string" },
+          "endTime": { "type": "string" }
+        }
+      },
+      "VideoMedia": {
+        "type": "object",
+        "properties": {
+          "_id": { "type": "string" },
+          "title": { "type": "string" },
+          "url": { "type": "string" },
+          "thumbnailUrl": { "type": "string" },
+          "mediaType": { "type": "string" },
+          "fileSize": { "type": "integer" }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>E3Di Digital Signage Billboard Player</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    html, body {
+      width: 100%;
+      height: 100%;
+      background-color: #000000;
+      overflow: hidden;
+    }
+
+    /* Pure Fullscreen Media Player Container */
+    .media-container {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      background: #000000;
+    }
+
+    video, img {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: fill;
+      background-color: #000000;
+      z-index: 1;
+    }
+
+    /* Watermark Overlay Layer — Guaranteed top z-index */
+    #watermarkLayer {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 999999;
+      display: none;
+    }
+    .wm-badge {
+      position: absolute;
+      top: 32px;
+      right: 32px;
+      background: rgba(10, 13, 42, 0.95);
+      padding: 14px 32px;
+      border-radius: 20px;
+      border: 3px solid rgba(108, 71, 255, 0.8);
+      font-size: 36px;
+      font-weight: 900;
+      color: #ffffff;
+      font-family: sans-serif;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.8);
+      z-index: 9999999;
+    }
+    .wm-bottom-bar {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      padding: 24px 0;
+      background: #FFD600;
+      text-align: center;
+      color: #000000;
+      font-size: 48px;
+      font-weight: 900;
+      letter-spacing: 6px;
+      font-family: sans-serif;
+      text-transform: lowercase;
+      border-top: 6px solid #eab308;
+      box-shadow: 0 -10px 30px rgba(0, 0, 0, 0.7);
+      z-index: 9999999;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="media-container">
+    <video id="playerVideo" autoplay loop muted playsinline preload="auto"></video>
+    <img id="playerImage" style="display:none;" alt="Ad Creative" />
+    
+    <!-- Watermark Layer (Top badge + bottom strip) -->
+    <div id="watermarkLayer">
+      <div class="wm-badge">E3<span style="color:#FFD600;">Di</span></div>
+      <div class="wm-bottom-bar">www.e3di.org</div>
+    </div>
+  </div>
+
+  <script>
+    // Extract Device ID dynamically from URL hash e.g. #ethree-75 or #ethree-65
+    const hashId = window.location.hash.replace('#', '').trim();
+    const queryId = (window.location.search.match(/[?&]id=([^&]+)/) || [])[1];
+    const DEVICE_ID = hashId || queryId || 'ethree-65';
+
+    const playerVideo = document.getElementById('playerVideo');
+    const playerImage = document.getElementById('playerImage');
+    const watermarkLayer = document.getElementById('watermarkLayer');
+
+    // Default fallback loop video URL
+    const DEFAULT_LOOP_URL = 'https://www.e3di.org/IMG_6479.mp4';
+
+    let currentPlayingUrl = '';
+
+    function isImageFile(url) {
+      if (!url) return false;
+      const clean = String(url).toLowerCase().split('?')[0];
+      return ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.svg'].some(ext => clean.endsWith(ext));
+    }
+
+    function shouldShowWatermark(item) {
+      if (!item) return false;
+      if (item.scheduleId && String(item.scheduleId).startsWith('fallback-')) return false;
+      if (item.hasWatermark === false || item.hasWatermark === 'false') return false;
+      if (item.hasWatermark === true || item.hasWatermark === 'true' || item.hasWatermark === 1) return true;
+      return true; // Default to watermark enabled for campaigns
+    }
+
+    function playMedia(url, hasWatermark = false) {
+      const targetUrl = url || DEFAULT_LOOP_URL;
+
+      // Toggle watermark overlay
+      if (hasWatermark) {
+        watermarkLayer.style.display = 'block';
+      } else {
+        watermarkLayer.style.display = 'none';
+      }
+
+      if (currentPlayingUrl === targetUrl) {
+        return;
+      }
+
+      currentPlayingUrl = targetUrl;
+      const isImg = isImageFile(targetUrl);
+
+      if (isImg) {
+        playerVideo.style.display = 'none';
+        playerVideo.pause();
+        playerImage.style.display = 'block';
+        playerImage.src = targetUrl;
+      } else {
+        playerImage.style.display = 'none';
+        playerVideo.style.display = 'block';
+        playerVideo.src = targetUrl;
+        playerVideo.muted = true;
+        playerVideo.play().catch(err => console.warn('Autoplay catch:', err));
+      }
+    }
+
+    const ENDPOINTS = [
+      'https://api.e3di.org/api/device/' + DEVICE_ID,
+      'https://www.e3di.org/api/device/' + DEVICE_ID,
+      'https://www.e3di.org/_/backend/api/device/' + DEVICE_ID
+    ];
+
+    let playlistItems = [];
+    let playlistIndex = 0;
+    let rotationTimer = null;
+
+    function startPlaylistRotation(newPlaylist) {
+      if (!newPlaylist || newPlaylist.length === 0) {
+        playMedia(DEFAULT_LOOP_URL, false);
+        return;
+      }
+
+      const oldIds = playlistItems.map(i => i.scheduleId || i._id).join(',');
+      const newIds = newPlaylist.map(i => i.scheduleId || i._id).join(',');
+
+      if (oldIds !== newIds) {
+        playlistItems = newPlaylist;
+        playlistIndex = 0;
+        playCurrentPlaylistItem();
+      }
+    }
+
+    function playCurrentPlaylistItem() {
+      if (!playlistItems || playlistItems.length === 0) {
+        playMedia(DEFAULT_LOOP_URL, false);
+        return;
+      }
+
+      if (playlistIndex >= playlistItems.length) {
+        playlistIndex = 0;
+      }
+
+      const item = playlistItems[playlistIndex];
+      let mediaUrl = item.url || item.filePath || '';
+      if (mediaUrl && !mediaUrl.startsWith('http')) {
+        mediaUrl = 'https://api.e3di.org' + (mediaUrl.startsWith('/') ? '' : '/') + mediaUrl;
+      }
+
+      playMedia(mediaUrl || DEFAULT_LOOP_URL, shouldShowWatermark(item));
+
+      if (rotationTimer) clearTimeout(rotationTimer);
+      if (playlistItems.length > 1) {
+        const duration = (item.durationSeconds || 15) * 1000;
+        rotationTimer = setTimeout(() => {
+          playlistIndex = (playlistIndex + 1) % playlistItems.length;
+          playCurrentPlaylistItem();
+        }, duration);
+      }
+    }
+
+    async function fetchPlaylist() {
+      let data = null;
+
+      for (const endpoint of ENDPOINTS) {
+        try {
+          const response = await fetch(endpoint, { cache: 'no-store' });
+          if (response.ok) {
+            data = await response.json();
+            break;
+          }
+        } catch (err) {}
+      }
+
+      if (data && data.playlist && data.playlist.length > 0) {
+        const nowMs = Date.now();
+        const filtered = data.playlist.filter(item => {
+          if (!item.date || !item.startTime || (item.scheduleId || '').startsWith('fallback-')) return true;
+          const startMs = new Date(`${item.date}T${item.startTime}:00+05:30`).getTime();
+          const endMs = item.endTime ? new Date(`${item.date}T${item.endTime}:59.999+05:30`).getTime() : Infinity;
+          if (nowMs < startMs) return false;
+          if (nowMs > endMs) return false;
+          return true;
+        });
+        startPlaylistRotation(filtered.length > 0 ? filtered : []);
+      } else if (data && data.current && data.current.url) {
+        startPlaylistRotation([data.current]);
+      } else {
+        startPlaylistRotation([]);
+      }
+    }
+
+    // Video error fallback to default loop
+    playerVideo.onerror = () => {
+      playMedia(DEFAULT_LOOP_URL, false);
+    };
+
+    // Auto-play retry on metadata load
+    playerVideo.onloadedmetadata = () => {
+      playerVideo.muted = true;
+      playerVideo.play().catch(() => {});
+    };
+
+    // Initialize immediate playback
+    playMedia(DEFAULT_LOOP_URL, false);
+    fetchPlaylist();
+    setInterval(fetchPlaylist, 3000);
+  </script>
+</body>
+</html>
